@@ -158,11 +158,26 @@ impl fmt::Display for TeX_Error {
 impl std::error::Error for TeX_Error {}
 
 /// Compiles a complete LaTeX document with Tectonic.
+///
+/// Nonempty `inject` code is prepended to the input, followed by a newline.
+/// It runs before the document, for example to define configuration macros.
 pub fn compile<W: Write>(
     env: &TeX_Env,
     input: Vec<u8>,
     out: &mut W,
+    inject: Option<&str>,
 ) -> Result<TeX_Output, TeX_Error> {
+    let input = match inject {
+        Some(code) if !code.is_empty() => {
+            let mut combined = Vec::with_capacity(code.len() + 1 + input.len());
+            combined.extend_from_slice(code.as_bytes());
+            combined.push(b'\n');
+            combined.extend_from_slice(&input);
+            combined
+        }
+        _ => input,
+    };
+
     let cache_path = env.cache_path();
     ensure_dir(&cache_path).map_err(|err| TeX_Error::new(err.to_string(), ""))?;
 

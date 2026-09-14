@@ -15,7 +15,7 @@ fn build_mode(cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
     let input = fs::read(input_path)?;
 
     let mut stdout = io::stdout();
-    let out = match compile(&cfg.tex, input, &mut stdout) {
+    let out = match compile(&cfg.tex, input, &mut stdout, cfg.inject.as_deref()) {
         Ok(out) => out,
         Err(err) => {
             return Err(Box::new(err));

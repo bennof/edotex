@@ -44,6 +44,9 @@ pub struct Config {
     /// Optional input path for modes that need one.
     #[serde(skip)]
     pub input: Option<PathBuf>,
+    /// TeX code supplied on the command line, prepended to the document.
+    #[serde(skip)]
+    pub inject: Option<String>,
     /// Server-related settings.
     pub server: ServerConfig,
     /// TeX-related paths.
@@ -88,6 +91,14 @@ struct Args {
         help = "Optional input file or directory, depending on the selected mode."
     )]
     input: Option<PathBuf>,
+
+    #[arg(
+        short = 'i',
+        long = "inject",
+        value_name = "CODE",
+        help = "TeX code to prepend before the document."
+    )]
+    inject: Option<String>,
 
     #[arg(
         short = 'c',
@@ -150,6 +161,7 @@ impl Default for Config {
         Self {
             mode: Mode::Build,
             input: None,
+            inject: None,
             server: ServerConfig {
                 port: 8080,
                 server_name: "localhost".to_string(),
@@ -237,6 +249,7 @@ impl Config {
 
     /// Applies values explicitly provided on the command line.
     fn apply_args(&mut self, args: Args) {
+        self.inject = args.inject;
         if let Some(port) = args.server_port {
             self.server.port = port;
         }

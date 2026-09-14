@@ -143,9 +143,31 @@ let env = TeX_Env::default();
 let input = std::fs::read("document.tex")?;
 let mut out = std::io::stdout();
 
-let result = compile(&env, input, &mut out)?;
+let result = compile(&env, input, &mut out, None)?;
 std::fs::write("document.pdf", result.pdf)?;
 ```
+
+To prepend TeX code before the document, pass it as the final argument:
+
+```rust
+let result = compile(
+    &env,
+    input,
+    &mut out,
+    Some(r"\newcommand{\usesolution}{nosolution}"),
+)?;
+```
+
+Nonempty injected code is separated from the document by a newline. `None` or
+an empty string leaves the input unchanged. From the shell, use `-i` or
+`--inject` (single quotes preserve TeX backslashes and shell special characters):
+
+```sh
+edotex --inject '\newcommand{\usesolution}{nosolution}' document.tex
+edotex -i '\def\usesolution{nosolution}' document.tex
+```
+
+Injection is a CLI-only configuration value and is not saved in JSON config files.
 
 Initialize the embedded TeX tree manually:
 
