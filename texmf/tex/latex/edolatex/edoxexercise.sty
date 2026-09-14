@@ -1,0 +1,264 @@
+% edoxexercise.sty — exercise and grading support for EDOX classes
+%
+% Purpose:
+%   Provides the core DSL for exercises, subexercises,
+%   point handling, and solution collection.
+%
+%   This package is independent of document classes and can be
+%   used in worksheets, articles, or books.
+%
+% Main user commands:
+%   \exercise
+%   \subexercise
+%   \solve
+%   \printsolutions
+%   \pp   (assign points)
+%
+% copyright (c) 2025 Benjamin Benno Falkner
+% SPDX-License-Identifier: MIT
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{edoxexercise}[2026/04/21 Exercise and grading support for edox classes]
+
+%%% ------------------------------------------------------------
+%%% Language-dependent labels
+%%% ------------------------------------------------------------
+\providecommand{\examname}{\iflanguage{ngerman}{Klausur}{Exam}}
+\providecommand{\exercisename}{\iflanguage{ngerman}{Aufgabe}{Exercise}}
+\providecommand{\solutionname}{\iflanguage{ngerman}{Lösung}{Solution}}
+\providecommand{\pointsname}{\iflanguage{ngerman}{Punkte}{Points}}
+
+
+\newlength{\edox@sublabelwidth}
+\settowidth{\edox@sublabelwidth}{\textbf{a)} }
+
+%%% ------------------------------------------------------------
+%%% Counter infrastructure
+%%% Provide counters only if not already defined by a class
+%%% ------------------------------------------------------------
+\providecommand{\providecounter}[2][]{%
+  \ifcsname c@#2\endcsname
+  \else
+    \ifx\relax#1\relax
+      \newcounter{#2}%
+    \else
+      \newcounter{#2}[#1]%
+    \fi
+  \fi
+}
+
+\providecounter[subsection]{exercise}
+\providecounter[exercise]{subexercise}
+
+\providecounter{points}
+\providecounter{exercisepoints}
+\providecounter{subexercisepoints}
+
+
+%%% ------------------------------------------------------------
+%%% Point display configuration
+%%% ------------------------------------------------------------
+\newif\if@points@show
+\@points@showfalse
+
+\newbox\b@exercisepoints
+
+
+%%% ------------------------------------------------------------
+%%% Solution storage configuration
+%%% ------------------------------------------------------------
+\newif\if@solution@show
+\@solution@showfalse
+
+\newif\if@solution@hascontent
+\@solution@hascontentfalse
+
+\newif\if@solution@subexercise
+\@solution@subexercisefalse
+
+\newif\if@solution@inside
+\@solution@insidefalse
+
+\newbox\b@solution
+\setbox\b@solution\vbox{}
+
+
+%%% ------------------------------------------------------------
+%%% Assign points to current exercise or subexercise
+%%% Usage:
+%%%   \pp        → 1 point
+%%%   \pp[3]     → 3 points
+%%% ------------------------------------------------------------
+\providecommand{\pp}[1][1]{%
+  \addtocounter{points}{#1}%
+  \addtocounter{exercisepoints}{#1}%
+  \addtocounter{subexercisepoints}{#1}%  
+  \if@points@show
+    \if@solution@inside
+      \kern2mm
+      \ifcase#1
+        \or \ensuremath{\square}%
+        \or \ensuremath{\square\,\square}%
+        \or \ensuremath{\square\,\square\,\square}%
+        \else \rule{1cm}{0.4pt}\,/\,#1%
+      \fi
+      \kern2mm
+    \fi
+  \fi
+}
+
+
+%%% ------------------------------------------------------------
+%%% Internal helper: append content to solution box
+%%% ------------------------------------------------------------
+\newcommand{\@tosolution}[1]{%
+  \global\@solution@hascontenttrue
+  \global\setbox\b@solution\vbox{%
+    \unvbox\b@solution
+    \vskip 2mm
+    \hbox to \textwidth{%
+      \vbox{\hsize=\textwidth%
+      \linewidth=\textwidth%
+      \@solution@insidetrue%
+      {\footnotesize#1}}}
+  }%
+}
+
+
+%%% ------------------------------------------------------------
+%%% Clear collected solutions
+%%% ------------------------------------------------------------
+\newcommand{\@clearsolution}{%
+  \global\@solution@hascontentfalse
+  \global\setbox\b@solution\vbox{}
+}
+
+
+\newcommand{\solutionpagebreak}{%
+  \global\setbox\b@solution\vbox{%
+    \unvbox\b@solution
+    \penalty-10000
+  }%
+}
+
+%%% ------------------------------------------------------------
+%%% Print exercise points summary
+%%% ------------------------------------------------------------
+\newcommand{\exercise@points}{%
+  \if@points@show
+    \ifnum\value{subexercise}<2
+      \hfill(\theexercisepoints\ \pointsname)\par
+    \else
+      \hfill(\unhbox\b@exercisepoints\;=\;\theexercisepoints\ \pointsname)\par
+    \fi
+  
+    % prepare solution entry
+    \@tosolution{%
+      \hbox to \hsize{\hfill\textbf{\rule{1cm}{0.4pt} / \theexercisepoints\space\pointsname}}
+    }
+  \fi
+
+  \setcounter{exercisepoints}{0}%
+  \global\setbox\b@exercisepoints=\hbox{}%
+}
+
+
+
+
+%%% ------------------------------------------------------------
+%%% Track subexercise points for display
+%%% ------------------------------------------------------------
+\newcommand{\subexercise@points}{%
+  \ifdim\wd\b@exercisepoints=0pt
+    \global\setbox\b@exercisepoints=\hbox{\thesubexercisepoints}%
+  \else
+    \global\setbox\b@exercisepoints=\hbox{%
+      \unhbox\b@exercisepoints\space+\space\thesubexercisepoints}%
+  \fi
+  \setcounter{subexercisepoints}{0}%
+}
+
+
+%%% ------------------------------------------------------------
+%%% Add solution text
+%%% ------------------------------------------------------------
+\providecommand{\solve}[1]{%
+  \if@solution@subexercise
+    \@tosolution{\footnotesize\itshape\textbf{\alph{subexercise})} #1}
+  \else
+    \@tosolution{\footnotesize{\noindent #1}}
+  \fi
+}
+
+
+%%% ------------------------------------------------------------
+%%% Print collected solutions
+%%% ------------------------------------------------------------
+\providecommand{\printsolutions}{%
+  \if@solution@hascontent
+  \markright{\solutionname}
+    \noindent{\Large\textbf{\solutionname}\newline}
+    \unvbox\b@solution
+  \fi
+  \@clearsolution
+}
+
+
+%%% ------------------------------------------------------------
+%%% Exercise environment
+%%% Syntax:
+%%%   \exercise{Text}
+%%%   \exercise[Custom title]{Text}
+%%%   \exercise*{Unnumbered}
+%%% ------------------------------------------------------------
+\NewDocumentCommand{\exercise}{s o +m}{%
+  \refstepcounter{exercise}%
+  \setcounter{subexercise}{0}%
+
+  \par\vspace{\baselineskip}%
+  \begingroup\parindent=0pt
+
+  \IfBooleanTF{#1}{%
+    \IfNoValueTF{#2}
+      {\@tosolution{\noindent\textbf{\exercisename: }}
+       \textbf{\exercisename:}\par\noindent\ignorespaces#3\smallskip}
+      {\@tosolution{\noindent\textbf{#2: }}
+       \textbf{#2}\par\noindent\ignorespaces#3\smallskip}%
+  }{%
+    \IfNoValueTF{#2}
+      {\@tosolution{\noindent\textbf{\exercisename~\arabic{exercise}: }}
+       \textbf{\exercisename~\arabic{exercise}:}\par\noindent\ignorespaces#3\smallskip}
+      {\@tosolution{\noindent\textbf{\exercisename~\arabic{exercise}: }}
+       \textbf{\exercisename~\arabic{exercise}: #2}\par\noindent\ignorespaces#3\smallskip}%
+  }
+
+  \par
+  \exercise@points
+  \@tosolution{\smallskip}
+  \endgroup
+}
+
+
+%%% ------------------------------------------------------------
+%%% Subexercise
+%%% ------------------------------------------------------------
+\NewDocumentCommand{\subexercise}{s o +m}{%
+  \refstepcounter{subexercise}%
+  \begingroup  
+\noindent%
+    \IfBooleanTF{#1}
+      {%
+        \IfNoValueTF{#2}
+          {\parbox[t]{\textwidth}{\itshape #3}}
+          {\parbox[t]{#2}{\itshape #3}}%
+      }
+      {%
+        \@solution@subexercisetrue
+        \IfNoValueTF{#2}
+          {\parbox[t]{\textwidth}{\parindent=0pt\hangindent=\edox@sublabelwidth\hangafter=1\noindent\itshape\textbf{\alph{subexercise})}\;#3}}
+          {\parbox[t]{#2}{\parindent=0pt\hangindent=\edox@sublabelwidth\hangafter=1\noindent\itshape\textbf{\alph{subexercise})}\;#3}}%
+      }
+  \endgroup
+  \ignorespaces
+  \subexercise@points
+}

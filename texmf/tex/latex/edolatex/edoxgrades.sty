@@ -1,0 +1,86 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{edoxgrades}[2026/04/21 German grading table for edox classes]
+\RequirePackage{expl3}
+
+\providecommand{\edoxgradeslabels}{1+,1,1-,2+,2,2-,3+,3,3-,4+,4,4-,5+,5,5-,6}
+\providecommand{\edoxgradesindices}{15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0}
+\providecommand{\edoxgradespercentages}{95,90,85,80,75,70,65,60,55,50,45,40,33,27,20,0}
+\providecommand{\edoxgradeslabeltitle}{Note}
+\providecommand{\edoxgradesindicestitle}{Indices}
+\providecommand{\edoxgradespointstitle}{Punkte}
+
+% ------------------------------------------------------------
+% Internal registers
+% ------------------------------------------------------------
+\newcount\h@multpm
+\newcount\h@rest
+\newcount\edox@gradecount
+
+% ------------------------------------------------------------
+% \multpm[<base>]{<value>}{<percent>}
+% ------------------------------------------------------------
+\newcommand{\multpm}[3][100]{%
+  \h@multpm=#2
+  \multiply\h@multpm by #3
+  \h@rest=\h@multpm
+  \divide\h@multpm by #1
+  \multiply\h@multpm by #1
+  \advance\h@rest by -\h@multpm
+  \divide\h@multpm by #1
+  \ifnum\h@rest > 0
+    \advance\h@multpm by 1
+  \fi
+  \the\h@multpm
+}
+
+% ------------------------------------------------------------
+% ExplSyntax helpers
+% ------------------------------------------------------------
+\ExplSyntaxOn
+
+\cs_new_protected:Npn \edoxgrades_setcount:
+  {
+    \edox@gradecount = \exp_args:No \clist_count:n { \edoxgradeslabels }
+  }
+
+\cs_new:Npn \edoxgrades_labelrow:n #1
+  {
+    \exp_args:No \clist_map_inline:nn {#1} { & ##1 }
+    \\
+  }
+
+\cs_new:Npn \edoxgrades_pointsrow:nn #1#2
+  {
+    \exp_args:No \clist_map_inline:nn {#2} { & \multpm{#1}{##1} }
+    \\
+  }
+
+\cs_new_protected:Npn \edoxgrades_table:n #1
+  {
+    \edoxgrades_setcount:
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.1}
+    \footnotesize
+    \begin{center}
+      \begin{tabular*}{\textwidth}{|l|@{\extracolsep{\fill}}*{\the\edox@gradecount}{c|}}
+        \hline
+        \edoxgradeslabeltitle
+        \edoxgrades_labelrow:n { \edoxgradeslabels }
+        \hline
+        \edoxgradesindicestitle
+        \edoxgrades_labelrow:n { \edoxgradesindices }
+        \hline
+        \edoxgradespointstitle
+        \edoxgrades_pointsrow:nn {#1} { \edoxgradespercentages }
+        \hline
+      \end{tabular*}
+    \end{center}
+  }
+
+\newcommand{\gradestable}[1]{%
+  \begingroup
+  \edoxgrades_table:n {#1}
+  \endgroup
+}
+
+\ExplSyntaxOff

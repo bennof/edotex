@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: edotex
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v3
+
+      - name: Build native dependencies
+        run: make deps
+
+      - name: Check
+        run: make check
+
+  build:
+    name: Build ${{ matrix.target.os }}
+    needs: check
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - os: ubuntu-latest
+            archive: edotex-linux-x86_64
+          - os: ubuntu-24.04-arm
+            archive: edotex-linux-aarch64
+          - os: macos-latest
+            archive: edotex-macos-aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v3
+
+      - name: Build native dependencies
+        run: make deps
+
+      - name: Build
+        run: make build
+
+      - name: Verify native linkage
+        run: sh scripts/check-native-linkage.sh "target/release/${BINARY_NAME}"
+
+      - name: Smoke test
+        run: ./target/release/${BINARY_NAME} --version
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${BINARY_NAME}" "dist/${BINARY_NAME}"
+          tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${BINARY_NAME}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.target.archive }}
+          path: ${{ matrix.target.archive }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+          fail_on_unmatched_files: true

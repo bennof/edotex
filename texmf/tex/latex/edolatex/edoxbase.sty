@@ -1,0 +1,68 @@
+% edoxbase.sty — shared base configuration for EDOX classes
+%
+% Purpose:
+%   This package provides the common foundation for all EDOX
+%   document classes (worksheets, articles, books).
+%
+%   It is responsible for:
+%     - language and font setup
+%     - basic math and graphics support
+%     - default page layout
+%     - shared exercise and worksheet infrastructure
+%
+%   Layout and document-type specific behaviour should
+%   preferably be implemented in separate packages or classes.
+%
+% copyright (c) 2025 Benjamin Benno Falkner
+% SPDX-License-Identifier: MIT
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{edoxbase}[2026/04/21 Shared base for edox classes]
+\RequirePackage{xkeyval}
+
+
+% ------------------------------------------------------------
+% Mathematics and tables
+% ------------------------------------------------------------
+
+\RequirePackage{array}
+
+% ------------------------------------------------------------
+% Graphics
+% ------------------------------------------------------------
+\RequirePackage{graphicx}
+\graphicspath{{figures/}}
+
+
+% ------------------------------------------------------------
+% EDOX subsystems
+% ------------------------------------------------------------
+\AtEndOfPackage{%
+\IfFileExists{edoxexercise.sty}{\RequirePackage{edoxexercise}}{}
+\IfFileExists{edoxworksheet.sty}{\RequirePackage{edoxworksheet}}{}
+}
+% ------------------------------------------------------------
+% Simple roman-numbered list environment
+%
+% Provides:
+%   \begin{enum} ... \end{enum}
+%
+% Intended for short lists inside worksheets.
+% ------------------------------------------------------------
+\newcounter{@enum}
+\renewcommand{\the@enum}{\roman{@enum}.}
+
+\newenvironment{enum}
+{%
+  \begin{list}{\the@enum}{%
+    \usecounter{@enum}
+    \setlength{\labelwidth}{1.5em}      % Breite der Nummernspalte
+    \setlength{\labelsep}{0.1em}      % Abstand zur Aufgabe
+    \setlength{\leftmargin}{2em}     % Gesamteinzug
+    \setlength{\itemindent}{0pt}
+    \let\makelabel\relax              % linksbündig
+  }%
+}
+{%
+  \end{list}
+}

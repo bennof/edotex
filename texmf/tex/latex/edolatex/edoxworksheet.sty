@@ -1,0 +1,256 @@
+% edoxworksheet.sty — worksheet settings for EDOX classes
+%
+% Purpose:
+%   Provides environments for worksheets, tests and exams.
+%   This package handles:
+%     - worksheet titles
+%     - page style for worksheets
+%     - point display and summaries
+%     - exam summaries and grading
+%
+% Notes:
+%   - Worksheets are intended as standalone documents.
+%   - Therefore \clearpage is intentionally used to enforce
+%     page boundaries between worksheets and summaries.
+%
+% copyright (c) 2025 Benjamin Benno Falkner
+% SPDX-License-Identifier: MIT
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{edoxworksheet}[2026/04/21 Worksheet settings for edox classes]
+
+% ------------------------------------------------------------
+% Dependencies
+% ------------------------------------------------------------
+\RequirePackage{edoxexercise}
+\RequirePackage{edoxgrades}
+
+% ------------------------------------------------------------
+% Language-dependent labels
+% ------------------------------------------------------------
+\providecommand{\worksheetname}{\iflanguage{ngerman}{Arbeitsblatt}{Worksheet}}
+\providecommand{\testname}{\iflanguage{ngerman}{Test}{Test}}
+\providecommand{\examname}{\iflanguage{ngerman}{Klausur}{Exam}}
+\providecommand{\totalname}{\iflanguage{ngerman}{Gesamt}{Total}}
+\providecommand{\gradename}{\iflanguage{ngerman}{Note}{Grade}}
+\providecommand{\wishname}{\iflanguage{ngerman}{Viel Erfolg!}{Good Luck!}}
+\providecommand{\solutionname}{\iflanguage{ngerman}{Lösung}{Solution}}
+
+% ------------------------------------------------------------
+% Counters
+% ------------------------------------------------------------
+\providecounter{wspage}
+\setcounter{wspage}{1}
+\providecounter{worksheet}
+
+% ------------------------------------------------------------
+% Name field shown in worksheet header
+% If \studentname is defined, it is printed automatically.
+% ------------------------------------------------------------
+\newcommand*\edo@namefield{%
+  Name: \ifcsname studentname\endcsname \studentname\else \underline{\hspace{6cm}}\fi
+}
+
+% ------------------------------------------------------------
+% Page style for worksheets
+%
+% Uses LaTeX page counter (\thepage) instead of a manual counter.
+% ------------------------------------------------------------
+\providepagestyle{edoWorkSheet}{
+  (\textwidth,0pt)
+  {\rightmark\hfill\edo@namefield}{\edo@namefield\hfill\rightmark}{\edo@namefield\hfill\rightmark}
+  (\textwidth,0pt)
+}{
+  (\textwidth,0pt)
+  {\thewspage\hfill\addtocounter{wspage}{1}}{\hfill\thewspage\addtocounter{wspage}{1}}{\hfill\thewspage\addtocounter{wspage}{1}}
+  (\textwidth,0pt)
+}
+%\newpagestyle{edoWorkSheet}{%
+%  \ihead{\edo@namefield}%
+%  \ohead{\rightmark}%
+%  \ofoot{\thewspage}%
+%}
+
+
+%\def\ps@edoWorkSheet{%
+%  \def\@oddhead{\hbox to\hsize{\edo@namefield\hfill\rightmark}}%
+%  \let\@evenhead\@oddhead
+%  \def\@oddfoot{\hbox to\hsize{\hfil\thewspage}}%
+%  \let\@evenfoot\@oddfoot
+%}
+
+% ------------------------------------------------------------
+% Helper commands
+% ------------------------------------------------------------
+\providecommand{\setpoints}[1]{\setcounter{points}{#1}}
+\providecommand{\sign}{}
+
+% ------------------------------------------------------------
+% Worksheet title support
+% ------------------------------------------------------------
+
+% Date field
+\def\@pdate{}
+\newcommand\pdate[1]{\def\@pdate{#1}}
+
+% Title layout
+\newcommand{\worksheettitle}[2]{%
+  \null
+  \noindent{\huge \textsc{\textbf{#1}}}\hfill\small{}\\
+  {\large {#2}}\hfill{\small \@pdate}\par
+  \vspace{3ex}%
+}
+
+% ------------------------------------------------------------
+% Section style used in exams
+% ------------------------------------------------------------
+\NewDocumentCommand{\wssection}{o m}{%
+  \vspace{1em}
+  \IfNoValueTF{#1}
+    {\markright{#2}}   
+    {\markright{#1}} 
+  \noindent{\Large\bfseries #2}%
+  \par\vspace{0.5em}
+  \@tosolution{\vspace{.6em}\noindent\large\textbf{#2 : }\par\vspace{0.5em}}
+}
+
+% ------------------------------------------------------------
+% Worksheet initialization helper
+%
+% Resets counters and enforces a new page.
+% The page break is intentional because worksheets are
+% treated as standalone units.
+% ------------------------------------------------------------
+\newcommand{\beginws}{
+  \clearpage
+  \setcounter{exercise}{0}%
+  \setcounter{subexercise}{0}%
+  \setcounter{points}{0}%
+  \setcounter{subexercisepoints}{0}%
+  \setcounter{wspage}{1}%
+  \pagestyle{edoWorkSheet}%
+}
+
+% ------------------------------------------------------------
+% Worksheet environment
+% ------------------------------------------------------------
+\newenvironment{worksheet}[2][solution]{%
+  \edef\ws@savedpagestyle{\currentpagestyle}%
+  \beginws
+  \stepcounter{worksheet}%
+  \worksheettitle{\worksheetname}{#2}%
+  \begingroup
+  \edef\ws@mode{#1}%
+  \parindent=0pt
+  \let\section\wssection 
+}{%
+  \clearpage
+  \def\ws@nosolution{nosolution}%
+  \ifx\ws@mode\ws@nosolution\else
+    \printsolutions%
+    \clearpage
+  \fi
+  \endgroup
+  \pagestyle{\ws@savedpagestyle}%
+}
+
+% ------------------------------------------------------------
+% Test environment (shows points)
+% ------------------------------------------------------------
+\newenvironment{test}[2][solution]{%
+  \edef\ws@savedpagestyle{\currentpagestyle}%
+  \beginws
+  \stepcounter{worksheet}%
+  \worksheettitle{\testname}{#2}%
+  \begingroup
+  \edef\ws@mode{#1}%
+  \parindent=0pt
+  \@points@showtrue
+  \let\section\wssection 
+}{%
+  \clearpage
+  \def\ws@nosolution{nosolution}%
+  \ifx\ws@mode\ws@nosolution\else
+    \printsolutions%
+    \clearpage
+  \fi
+  \endgroup
+  \pagestyle{\ws@savedpagestyle}%
+}
+
+% ------------------------------------------------------------
+% Exam summary helpers
+% ------------------------------------------------------------
+\providecommand{\examfinal}{
+  \vskip1cm
+  \textbf{\wishname}\hfill\textbf{\totalname: \thepoints\space\pointsname}
+}
+
+\providecommand{\examsummary}[1][]{
+  \printsolutions
+  \hfill\textbf{\totalname: \underline{\hspace{1cm}}/ \thepoints\space\pointsname}
+  
+  \gradestable{\c@points}
+  
+  \vskip 1mm
+  \noindent\textbf{\gradename: \underline{\hspace{4cm}}}
+
+  \vskip1cm
+  \noindent \underline{\hspace{4cm}}\\
+  \noindent #1
+}
+
+% ------------------------------------------------------------
+% Exam environment
+% ------------------------------------------------------------
+\newenvironment{exam}[2][solution]{%
+  \edef\ws@savedpagestyle{\currentpagestyle}%
+  \beginws
+  \stepcounter{worksheet}%
+  \worksheettitle{\examname}{#2}%
+  \begingroup
+  \edef\ws@mode{#1}%
+  \parindent=0pt
+  \@points@showtrue
+  \let\section\wssection
+}{%
+  \examfinal
+  \clearpage
+  \def\ws@nosolution{nosolution}%
+  \ifx\ws@mode\ws@nosolution\else
+    \examsummary[\sign]
+    \clearpage
+  \fi
+  \endgroup
+  \pagestyle{\ws@savedpagestyle}%
+}
+
+
+\newcommand{\answerbox}[2][\textwidth]{%
+  \vbox{%
+    \hrule
+    \@tempcnta=0
+    \loop
+      \advance\@tempcnta by 1
+      \vskip 1cm
+      \hrule width #1
+      \ifdim \@tempcnta cm < #2
+    \repeat
+  }%
+}
+
+\newcommand{\mathbox}[2][\textwidth]{%
+  \vbox{%
+    \@tempcnta=0
+    \hrule width #1
+    \loop
+      \advance\@tempcnta by 1
+      \hbox to #1{%
+        \cleaders\hbox{\vrule height 0.5cm depth 0pt\hskip 0.5cm}\hfill
+        \vrule height 0.5cm depth 0pt
+      }%
+      \hrule width #1
+      \ifdim \@tempcnta\dimexpr 0.5cm\relax < #2
+    \repeat
+  }%
+}
