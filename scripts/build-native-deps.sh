@@ -18,8 +18,23 @@ export CXXFLAGS="${CXXFLAGS:-} -fPIC"
 fetch() {
     name=$1 url=$2 checksum=$3
     archive="$DEPS/downloads/$name"
+    if [ -f "$archive" ]; then
+        actual=$(shasum -a 256 "$archive" | awk '{print $1}')
+        if [ "$actual" != "$checksum" ]; then
+            echo "Discarding invalid cached $name (expected $checksum, got $actual)" >&2
+            rm -f "$archive"
+        fi
+    fi
     if [ ! -f "$archive" ]; then
         curl -fLsS --retry 3 "$url" -o "$archive.tmp"
+        actual=$(shasum -a 256 "$archive.tmp" | awk '{print $1}')
+        if [ "$actual" != "$checksum" ]; then
+            echo "Checksum mismatch for $name from $url" >&2
+            echo "Expected: $checksum" >&2
+            echo "Actual:   $actual" >&2
+            rm -f "$archive.tmp"
+            return 1
+        fi
         mv "$archive.tmp" "$archive"
     fi
     printf '%s  %s\n' "$checksum" "$archive" | shasum -a 256 -c -
@@ -27,7 +42,7 @@ fetch() {
 }
 
 fetch pkgconf.tar.xz https://distfiles.ariadne.space/pkgconf/pkgconf-2.3.0.tar.xz 3a9080ac51d03615e7c1910a0a2a8df08424892b5f13b0628a204d3fcce0ea8b
-fetch zlib.tar.gz https://zlib.net/fossils/zlib-1.3.1.tar.gz 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+fetch zlib.tar.gz https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 fetch icu.tgz https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-src.tgz 588e431f77327c39031ffbb8843c0e3bc122c211374485fa87dc5f3faff24061
 fetch graphite.tar.gz https://github.com/silnrsi/graphite/archive/refs/tags/1.3.14.tar.gz 7a3b342c5681921ce2e0c2496509d30b5b078399d5a7bd2358f95166d57d91df
 fetch png.tar.gz https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.55.tar.gz 71a2c5b1218f60c4c6d2f1954c7eb20132156cae90bdb90b566c24db002782a6

@@ -83,7 +83,7 @@ jobs:
           tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${BINARY_NAME}"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target.archive }}
           path: ${{ matrix.target.archive }}.tar.gz
@@ -98,13 +98,13 @@ jobs:
       contents: write
     steps:
       - name: Download Artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.tar.gz
           fail_on_unmatched_files: true
