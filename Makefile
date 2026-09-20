@@ -63,6 +63,11 @@ install: build
 install-texmf:
 	cargo run -- install --local-dir "$(LOCAL_DIR)"
 
+update-texmf:
+	rsync -av ./texmf $(LOCAL_DIR)/edotex/
+
+
+
 doc: $(DOC_PDF)
 
 $(DOC_DIR)/%.pdf: $(DOC_DIR)/%.tex
