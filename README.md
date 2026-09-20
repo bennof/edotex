@@ -232,3 +232,7 @@ and the captured log. Tectonic status messages are also written to the supplied
 ## License
 
 [MIT License](LICENSE), copyright (c) 2026 Benjamin Benno Falkner.
+
+## Note on AI-assisted development
+
+This project is developed with the assistance of AI tools.
