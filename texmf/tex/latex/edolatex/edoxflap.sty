@@ -1,0 +1,165 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{edoxflap}[2026/09/20 Flapsheet settings for edox classes]
+
+
+% ------------------------------------------------------------
+% Dependencies
+% ------------------------------------------------------------
+\RequirePackage{tabularx}
+
+% ------------------------------------------------------------
+% Language-dependent labels
+% ------------------------------------------------------------
+\providecommand{\flapname}{\iflanguage{ngerman}{Team-Lernplan}{Team Learning Plan}}
+\providecommand{\namename}{\iflanguage{ngerman}{Name}{Name}}
+\providecommand{\teamname}{\iflanguage{ngerman}{Team}{Team}}
+\providecommand{\timename}{\iflanguage{ngerman}{Zeitraum}{Period}}
+\providecommand{\sprintgoalname}{\iflanguage{ngerman}{Sprintziel}{Sprint Goal}}
+\providecommand{\dodname}{Definition of Done (DoD)}
+\providecommand{\dodexplainname}{\iflanguage{ngerman}{Wann ist eine Station / der Sprint wirklich fertig?}{When is a station / the sprint really done?}}
+\providecommand{\dofname}{Definition of Fun (DoF)}
+\providecommand{\dofexplainname}{\iflanguage{ngerman}{Wie wollen wir miteinander lernen und arbeiten?}{How do we want to learn and work together?}}
+\providecommand{\taskname}{\iflanguage{ngerman}{Station / Thema}{Station / Topic}}
+\providecommand{\koennenname}{\iflanguage{ngerman}{Können}{Can-do}}
+\providecommand{\todoname}{To Do}
+\providecommand{\doingname}{Doing}
+\providecommand{\checkname}{Check}
+\providecommand{\donename}{Done}
+\providecommand{\teamgoalname}{\iflanguage{ngerman}{Teamziel}{Team Goal}}
+\providecommand{\problemsname}{\iflanguage{ngerman}{Probleme / Blocker}{Problems / Blockers}}
+\providecommand{\reflectionname}{\iflanguage{ngerman}{Reflexion}{Reflection}}
+\providecommand{\parentsignname}{\iflanguage{ngerman}{Unterschrift Erziehungsberechtigte/r}{Signature parent/guardian}}
+\providecommand{\flapfootername}{\iflanguage{ngerman}{Mit Bleistift ausfüllen: Status, Kompetenz-Batterie, DoD/DoF, Probleme und Reflexion bleiben veränderbar. Dieses Blatt ist unterschrieben und ausgefüllt bei der Arbeit abzugeben.}{Fill in with pencil: status, competence battery, DoD/DoF, problems and reflection remain changeable. This sheet must be handed in signed and completed at the start of the test.}}
+
+% ------------------------------------------------------------
+% Graphics
+% ------------------------------------------------------------
+% Battery icon for the "KOENNEN" (can-do/competence) self-assessment
+\newcommand{\battery}{%
+  \tikz[baseline=-0.4ex]{
+    \draw (0,0) rectangle (0.9,0.32);
+    \draw (0.225,0) -- (0.225,0.32);
+    \draw (0.45,0) -- (0.45,0.32);
+    \draw (0.675,0) -- (0.675,0.32);
+    \draw (0.9,0.08) rectangle (0.98,0.24);
+  }%
+}
+
+% Empty status circle for TO DO / DOING / CHECK / DONE
+\newcommand{\statuscircle}{%
+  \tikz[baseline=-0.4ex]{\draw (0,0) circle (0.13);}%
+}
+
+% ------------------------------------------------------------
+% Page style for flap
+% ------------------------------------------------------------
+% \edo@namefield is an internal (@-name) command from edoxworksheet.sty,
+% so its use here must be bracketed with \makeatletter/\makeatother.
+\makeatletter
+\providepagestyle{edoFlap}{
+  (\textwidth,0pt)
+  {\rightmark\hfill\edo@namefield}{\edo@namefield\hfill\rightmark}{\edo@namefield\hfill\rightmark}
+  (\textwidth,0pt)
+}{
+  (\textwidth,0pt)
+  {\fontsize{7.5pt}{8pt}\selectfont\flapfootername\hfill}{\fontsize{7.5pt}{8pt}\selectfont\flapfootername\hfill}{\fontsize{7.5pt}{8pt}\selectfont\flapfootername\hfill}
+  (\textwidth,0pt)
+}
+\makeatother
+
+% ------------------------------------------------------------
+% Flap environment
+% ------------------------------------------------------------
+% #1 = topic, #2 = period (e.g. "10.09.--24.10.26")
+\newenvironment{flap}[2]{%
+\edef\ws@savedpagestyle{\currentpagestyle}%
+\begingroup
+\pagestyle{edoFlap}%
+\noindent{\LARGE\bfseries #1 -- \flapname}\\[5pt]
+\noindent{\small \teamname: \underline{\hspace{4cm}}\hfill
+  \timename: #2}
+
+\vspace{6pt}
+
+}{%
+\clearpage
+\endgroup
+  \pagestyle{\ws@savedpagestyle}%
+}
+
+
+% ------------------------------------------------------------
+% Helper commands
+% ------------------------------------------------------------
+
+% Heading with two writing lines underneath (no box)
+% #1 = title, #2 = subtitle (small, optional/empty)
+\newcommand{\flaplines}[2]{%
+  \noindent\textbf{\MakeUppercase{#1}}%
+  \ifx\\#2\\\else\\{\footnotesize #2}\fi\\[6pt]
+  \noindent\rule{\dimexpr\linewidth-11pt\relax}{0.4pt}\\[10pt]
+  \noindent\rule{\dimexpr\linewidth-11pt\relax}{0.4pt}%
+}
+
+
+
+% One competence row of the station table
+% #1 = number, #2 = station name
+\newcommand{\stationrow}[2]{%
+  #1~~#2 & \battery & \statuscircle & \statuscircle & \statuscircle & \statuscircle\\
+}
+
+% Station table. #1 = all \stationrow lines.
+\newcommand{\stations}[1]{%
+\noindent
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\dimexpr\linewidth-15pt\relax}{@{}X
+  >{\centering\arraybackslash}p{1.6cm}
+  >{\centering\arraybackslash}p{1.3cm}
+  >{\centering\arraybackslash}p{1.3cm}
+  >{\centering\arraybackslash}p{1.3cm}
+  >{\centering\arraybackslash}p{1.3cm}@{}}
+\textbf{\taskname} & \textbf{\small\koennenname} & \textbf{\small\todoname} & \textbf{\small\doingname} & \textbf{\small\checkname} & \textbf{\small\donename}\\
+\hline
+#1%
+\end{tabularx}
+\vspace{8pt}
+}
+
+
+
+% Opening block: sprint goal statement plus DoD/DoF (Scrum "Sprint Planning")
+\newcommand{\sprintplanning}[1]{
+  \noindent\textbf{\MakeUppercase{\sprintgoalname}}\\[3pt]
+  #1
+
+  \vspace{8pt}
+  \flaplines{\dodname}{\dodexplainname}
+
+  \vspace{8pt}
+  \flaplines{\dofname}{\dofexplainname}
+
+  \vspace{8pt}
+}
+
+% Closing block: team goal reminder plus problems/blockers and reflection
+% (Scrum "Sprint Retrospective")
+\newcommand{\sprintretro}[1]{
+  \noindent\textbf{\MakeUppercase{\teamgoalname}}\quad
+  #1
+
+\vspace{8pt}
+\flaplines{\problemsname}{}
+
+\vspace{8pt}
+\flaplines{\reflectionname}{}
+
+\vspace{14pt}
+}
+
+\newcommand{\parentsign}{
+  \noindent\rule{6cm}{0.4pt}\\[-1pt]
+{\footnotesize \parentsignname}
+}
+
