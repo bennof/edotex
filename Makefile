@@ -64,7 +64,7 @@ install-texmf:
 	cargo run -- install --local-dir "$(LOCAL_DIR)"
 
 update-texmf:
-	rsync -av ./texmf $(LOCAL_DIR)/edotex/
+	rsync -av  --exclude=/tex/latex/bflatex/fontconfig.tex ./texmf/ "$(LOCAL_DIR)/texmf/"
 
 
 

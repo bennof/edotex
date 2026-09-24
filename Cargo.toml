@@ -4,6 +4,9 @@ version = "0.1.0-rc.3"
 edition = "2024"
 license = "MIT"
 
+[profile.release]
+opt-level = 3
+
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 serde = { version = "1.0.229", features = ["derive"] }
