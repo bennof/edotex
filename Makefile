@@ -67,7 +67,6 @@ update-texmf:
 	rsync -av  --exclude=/tex/latex/bflatex/fontconfig.tex ./texmf/ "$(LOCAL_DIR)/texmf/"
 
 
-
 doc: $(DOC_PDF)
 
 $(DOC_DIR)/%.pdf: $(DOC_DIR)/%.tex

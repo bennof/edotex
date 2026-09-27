@@ -6,7 +6,7 @@ use edotex::config::{self, Mode};
 use edotex::tex::{self, compile};
 
 fn build_mode(cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    tex::textree::init(&cfg.tex)?;
+    tex::textree::init(&cfg.tex, None)?;
 
     let input_path = cfg
         .input
@@ -40,7 +40,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     match config.mode {
         Mode::Build => build_mode(&config)?,
-        Mode::Install => tex::textree::init(&config.tex)?,
+        Mode::Install => tex::textree::init(&config.tex, Some(config.force))?,
         Mode::Serve => return Err("serve mode is not implemented yet".into()),
     }
 

@@ -47,6 +47,9 @@ pub struct Config {
     /// TeX code supplied on the command line, prepended to the document.
     #[serde(skip)]
     pub inject: Option<String>,
+    /// Whether to force reinitializing the local TeX tree.
+    #[serde(skip)]
+    pub force: bool,
     /// Server-related settings.
     pub server: ServerConfig,
     /// TeX-related paths.
@@ -151,6 +154,8 @@ struct Args {
         help = "Additional TeX input search path. Can be supplied multiple times."
     )]
     tex_search_paths: Vec<PathBuf>,
+    #[arg(short = 'f', long = "force", help = "force overwrite current settings")]
+    force: bool,
 }
 
 impl Default for Config {
@@ -162,6 +167,7 @@ impl Default for Config {
             mode: Mode::Build,
             input: None,
             inject: None,
+            force: false,
             server: ServerConfig {
                 port: 8080,
                 server_name: "localhost".to_string(),
@@ -250,6 +256,7 @@ impl Config {
     /// Applies values explicitly provided on the command line.
     fn apply_args(&mut self, args: Args) {
         self.inject = args.inject;
+        self.force = args.force;
         if let Some(port) = args.server_port {
             self.server.port = port;
         }
