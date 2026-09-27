@@ -82,6 +82,7 @@ clean:
 	rm -f $(DOC_PDF)
 
 commit-version:
+	cargo check --all-targets
 	git add .
 	git commit -m "Version $(VERSION)"
 	git tag -a "v$(VERSION)"
