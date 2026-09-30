@@ -44,6 +44,9 @@ pub struct Config {
     /// Optional input path for modes that need one.
     #[serde(skip)]
     pub input: Option<PathBuf>,
+    /// Optional output path override for build mode.
+    #[serde(skip)]
+    pub output: Option<PathBuf>,
     /// TeX code supplied on the command line, prepended to the document.
     #[serde(skip)]
     pub inject: Option<String>,
@@ -154,6 +157,14 @@ struct Args {
         help = "Additional TeX input search path. Can be supplied multiple times."
     )]
     tex_search_paths: Vec<PathBuf>,
+
+    #[arg(
+        short = 'o',
+        long = "output",
+        value_name = "PATH",
+        help = "Output PDF path. Defaults to the input path with its extension changed to .pdf."
+    )]
+    output: Option<PathBuf>,
     #[arg(short = 'f', long = "force", help = "force overwrite current settings")]
     force: bool,
 }
@@ -166,6 +177,7 @@ impl Default for Config {
         Self {
             mode: Mode::Build,
             input: None,
+            output: None,
             inject: None,
             force: false,
             server: ServerConfig {
@@ -257,6 +269,7 @@ impl Config {
     fn apply_args(&mut self, args: Args) {
         self.inject = args.inject;
         self.force = args.force;
+        self.output = args.output;
         if let Some(port) = args.server_port {
             self.server.port = port;
         }

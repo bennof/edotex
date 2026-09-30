@@ -22,7 +22,10 @@ fn build_mode(cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let output_path = pdf_output_path(input_path);
+    let output_path = match &cfg.output {
+        Some(path) => path.clone(),
+        None => pdf_output_path(input_path),
+    };
     println!("write: {}", output_path.display());
     fs::write(output_path, out.pdf)?;
 
