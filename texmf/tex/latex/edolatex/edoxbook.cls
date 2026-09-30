@@ -1,6 +1,12 @@
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{edoxbook}[2025/09/28 EDOX book class]
 
+\DeclareOption{lang=ngerman}{%
+  \PassOptionsToClass{lang=ngerman}{bfarticle}%
+}
+
+\ProcessOptions\relax
+
 \LoadClass{bfbook}
 \RequirePackage{edoxbase}
 \automark{section}
