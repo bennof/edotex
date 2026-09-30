@@ -92,7 +92,9 @@ build_cmake() {
 sed 's/TARGET_SONAME_FILE:graphite2/TARGET_FILE:graphite2/g' \
     "$DEPS/src/graphite-1.3.14/src/CMakeLists.txt" > "$DEPS/build/graphite-CMakeLists.txt"
 cp "$DEPS/build/graphite-CMakeLists.txt" "$DEPS/src/graphite-1.3.14/src/CMakeLists.txt"
-build_cmake graphite graphite-1.3.14
+# On Linux a Graphite example links FreeType. Once our static FreeType is installed
+# (a repeated run), it would be found without its own dependencies and fail to link.
+build_cmake graphite graphite-1.3.14 -DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON
 build_cmake png libpng-1.6.55 -DPNG_SHARED=OFF -DPNG_FRAMEWORK=OFF -DPNG_TESTS=OFF -DPNG_TOOLS=OFF \
     -DZLIB_LIBRARY="$PREFIX/lib/libz.a" -DZLIB_INCLUDE_DIR="$PREFIX/include"
 build_cmake freetype freetype-VER-2-14-3 -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_BZIP2=ON \

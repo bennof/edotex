@@ -85,9 +85,9 @@ clean:
 	rm -rf web/build web/.svelte-kit web/node_modules
 
 commit-version:
-	cargo check --all-targets
-	git add .
-	git commit -m "Version $(VERSION)"
+	#cargo check --all-targets
+	#git add .
+	#git commit -m "Version $(VERSION)"
 	git tag -a "v$(VERSION)"
 	git push
 	git push --tags

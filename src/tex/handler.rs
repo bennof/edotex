@@ -35,6 +35,7 @@ type Sender = mpsc::Sender<Result<Bytes, Infallible>>;
 /// Initialize the environment's TeX tree before registering this handler.
 /// Once streaming starts, compilation errors are JSON parts in the HTTP 200 response.
 /// Status messages stream during the run; the complete TeX log follows at the end.
+/// Rejected requests (400, 413, 503) carry a plain-text reason in the body.
 ///
 /// The body is either a single TeX document or `multipart/form-data`. In a multipart
 /// body the first part is the TeX document; every further part is written to a
@@ -92,14 +93,26 @@ where
         .get(header::CONTENT_LENGTH)
         .and_then(|value| value.to_str().ok()?.parse::<u64>().ok());
     if content_length.is_some_and(|length| length > limit as u64) {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        return Rejection::too_large(limit).response();
     }
-    let upload = read_upload(request, limit).await?;
+    let upload = match read_upload(request, limit).await {
+        Ok(upload) => upload,
+        Err(rejection) => return rejection.response(),
+    };
     // The slot is held by the worker task until compilation has finished.
-    let slot = compile_slots
+    let slot = match compile_slots
         .map(|slots| slots.try_acquire_owned())
         .transpose()
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Rejection::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "all compile slots are busy, try again later",
+            )
+            .response();
+        }
+    };
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -204,17 +217,55 @@ where
     Ok(response)
 }
 
+/// Why a request was rejected before compiling; sent as a plain-text body.
+struct Rejection {
+    status: StatusCode,
+    reason: String,
+}
+
+impl Rejection {
+    fn new(status: StatusCode, reason: impl Into<String>) -> Self {
+        Self {
+            status,
+            reason: reason.into(),
+        }
+    }
+
+    fn bad_request(reason: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, reason)
+    }
+
+    fn too_large(limit: usize) -> Self {
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!("request body larger than {limit} bytes"),
+        )
+    }
+
+    fn internal(reason: impl Into<String>) -> Self {
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, reason)
+    }
+
+    fn response(self) -> Result<Response<Body>, StatusCode> {
+        Response::builder()
+            .status(self.status)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Body::from(self.reason))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
 /// The TeX document and the directory holding the other uploaded files.
 struct Upload {
     input: Vec<u8>,
     root: TempDir,
 }
 
-async fn read_upload(request: Request, limit: usize) -> Result<Upload, StatusCode> {
+async fn read_upload(request: Request, limit: usize) -> Result<Upload, Rejection> {
     let root = tempfile::Builder::new()
         .prefix("edotex-")
         .tempdir()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|err| Rejection::internal(format!("cannot create upload directory: {err}")))?;
     let content_type = request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -222,25 +273,27 @@ async fn read_upload(request: Request, limit: usize) -> Result<Upload, StatusCod
         .unwrap_or_default();
     let input = match multer::parse_boundary(content_type) {
         Ok(boundary) => read_multipart(request.into_body(), boundary, limit, root.path()).await?,
-        Err(multer::Error::NoBoundary) => return Err(StatusCode::BAD_REQUEST),
+        Err(multer::Error::NoBoundary) => {
+            return Err(Rejection::bad_request("multipart body without boundary"));
+        }
         Err(_) => read_body(request.into_body(), limit).await?,
     };
     if input.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(Rejection::bad_request("empty TeX document"));
     }
     Ok(Upload { input, root })
 }
 
-async fn read_body(body: Body, limit: usize) -> Result<Vec<u8>, StatusCode> {
+async fn read_body(body: Body, limit: usize) -> Result<Vec<u8>, Rejection> {
     let bytes = to_bytes(body, limit).await.map_err(|err| {
         // Axum wraps the body's length-limit error as its source.
         if err
             .source()
             .is_some_and(|source| source.is::<http_body_util::LengthLimitError>())
         {
-            StatusCode::PAYLOAD_TOO_LARGE
+            Rejection::too_large(limit)
         } else {
-            StatusCode::BAD_REQUEST
+            Rejection::bad_request(format!("unreadable request body: {err}"))
         }
     })?;
     Ok(bytes.to_vec())
@@ -252,45 +305,53 @@ async fn read_multipart(
     boundary: String,
     limit: usize,
     root: &Path,
-) -> Result<Vec<u8>, StatusCode> {
+) -> Result<Vec<u8>, Rejection> {
     let constraints = Constraints::new().size_limit(SizeLimit::new().whole_stream(limit as u64));
     let mut multipart = Multipart::with_constraints(body.into_data_stream(), boundary, constraints);
     let mut input = None;
     let mut names = HashSet::new();
-    while let Some(mut field) = multipart.next_field().await.map_err(multipart_status)? {
+    let invalid = |err| multipart_rejection(err, limit);
+    while let Some(mut field) = multipart.next_field().await.map_err(invalid)? {
         if input.is_none() {
-            input = Some(field.bytes().await.map_err(multipart_status)?.to_vec());
+            input = Some(field.bytes().await.map_err(invalid)?.to_vec());
             continue;
         }
-        let name = field
-            .file_name()
-            .and_then(upload_path)
-            .ok_or(StatusCode::BAD_REQUEST)?;
+        let raw_name = field.file_name().map(str::to_owned);
+        let name = raw_name.as_deref().and_then(upload_path).ok_or_else(|| {
+            Rejection::bad_request(match &raw_name {
+                Some(name) => {
+                    format!("invalid asset name {name:?}: use a relative path without ..")
+                }
+                None => "asset part without a file name".into(),
+            })
+        })?;
         if !names.insert(name.clone()) {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(Rejection::bad_request(format!(
+                "duplicate asset name {:?}",
+                name.display()
+            )));
         }
-        let path = root.join(name);
+        let path = root.join(&name);
+        let clash = |err| file_rejection(err, &name);
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(file_status)?;
+            tokio::fs::create_dir_all(parent).await.map_err(clash)?;
         }
         let mut file = tokio::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
             .await
-            .map_err(file_status)?;
-        while let Some(chunk) = field.chunk().await.map_err(multipart_status)? {
+            .map_err(clash)?;
+        while let Some(chunk) = field.chunk().await.map_err(invalid)? {
             file.write_all(&chunk)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .map_err(|err| Rejection::internal(format!("cannot store asset: {err}")))?;
         }
         file.flush()
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|err| Rejection::internal(format!("cannot store asset: {err}")))?;
     }
-    input.ok_or(StatusCode::BAD_REQUEST)
+    input.ok_or_else(|| Rejection::bad_request("multipart body without parts"))
 }
 
 /// Accepts only relative paths made of normal components, e.g. `images/logo.png`.
@@ -308,22 +369,25 @@ fn upload_path(name: &str) -> Option<PathBuf> {
     (!path.as_os_str().is_empty()).then_some(path)
 }
 
-fn multipart_status(err: multer::Error) -> StatusCode {
+fn multipart_rejection(err: multer::Error, limit: usize) -> Rejection {
     match err {
         multer::Error::StreamSizeExceeded { .. } | multer::Error::FieldSizeExceeded { .. } => {
-            StatusCode::PAYLOAD_TOO_LARGE
+            Rejection::too_large(limit)
         }
-        _ => StatusCode::BAD_REQUEST,
+        err => Rejection::bad_request(format!("malformed multipart body: {err}")),
     }
 }
 
 /// Name clashes such as `a` and `a/b` are client errors.
-fn file_status(err: io::Error) -> StatusCode {
+fn file_rejection(err: io::Error, name: &Path) -> Rejection {
     match err.kind() {
         io::ErrorKind::AlreadyExists
         | io::ErrorKind::NotADirectory
-        | io::ErrorKind::IsADirectory => StatusCode::BAD_REQUEST,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
+        | io::ErrorKind::IsADirectory => Rejection::bad_request(format!(
+            "asset name {:?} clashes with another asset",
+            name.display()
+        )),
+        _ => Rejection::internal(format!("cannot store asset: {err}")),
     }
 }
 
@@ -706,6 +770,46 @@ mod tests {
             status(no_boundary, None, None).await,
             StatusCode::BAD_REQUEST
         );
+    }
+
+    #[tokio::test]
+    async fn rejections_explain_the_reason() {
+        let tex: (Option<&str>, &[u8]) = (None, b"tex");
+        for (request, reason) in [
+            (request(Method::POST, ""), "empty TeX document"),
+            (
+                multipart(&[tex, (Some("../x.png"), b"x")]),
+                "invalid asset name \"../x.png\"",
+            ),
+            (
+                multipart(&[tex, (Some("a.png"), b"x"), (Some("a.png"), b"y")]),
+                "duplicate asset name \"a.png\"",
+            ),
+            (
+                multipart(&[tex, (None, b"x")]),
+                "asset part without a file name",
+            ),
+        ] {
+            let response = handle_with(request, TeX_Env::default(), None, None, succeed)
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body = String::from_utf8_lossy(&body);
+            assert!(body.contains(reason), "{body}");
+        }
+        let response = handle_with(
+            request(Method::POST, vec![b'x'; 6]),
+            TeX_Env::default(),
+            Some(5),
+            None,
+            succeed,
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body.as_ref(), b"request body larger than 5 bytes");
     }
 
     #[tokio::test]
