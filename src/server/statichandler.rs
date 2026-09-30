@@ -1,107 +1,74 @@
-use std::{
-    error::Error,
-    path::{Component, Path, PathBuf},
-};
+use std::path::Path;
 
 use axum::{
     body::Body,
     extract::Request,
-    http::{Method, Response, StatusCode, header},
+    http::{Method, Response, StatusCode},
 };
-
 use tokio::fs;
 
-use super::mime::get_content_type;
+use super::filehandler::{
+    FileRequest, error_response, file_response, index_path, io_error, spa_fallback,
+};
 
-fn safe_request_path(path: &str) -> Option<PathBuf> {
-    let path = path.trim_start_matches('/');
-
-    if path.is_empty() {
-        return Some(PathBuf::from("index.html"));
-    }
-
-    let path = Path::new(path);
-
-    path.components()
-        .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
-        .then(|| path.to_path_buf())
-}
-
+/// Serves GET/HEAD requests from a disk directory. URL percent escapes are not decoded.
+///
+/// `fallback` names a file below `base_dir`, e.g. `index.html`, served with 200 for
+/// missing paths without a file extension, so single-page app routes like `/doc/42`
+/// load the app. Missing paths with an extension, e.g. `/app.js`, still get 404.
 pub async fn handle_static(
     request: Request,
     base_dir: impl AsRef<Path>,
-) -> Result<Response<Body>, Box<dyn Error>> {
-    let is_head = match *request.method() {
-        Method::GET => false,
-        Method::HEAD => true,
-        _ => {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .header(header::ALLOW, "GET, HEAD")
-                .body(Body::empty())?);
-        }
+    fallback: Option<&str>,
+) -> Result<Response<Body>, StatusCode> {
+    let file_request = match FileRequest::parse(&request) {
+        Ok(value) => value,
+        Err(status) => return error_response(status, request.method() == Method::HEAD),
     };
-
-    let relative = match safe_request_path(request.uri().path()) {
-        Some(path) => path,
-        None => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from("Invalid path"))?);
-        }
-    };
-
-    let mut path = base_dir.as_ref().join(relative);
-
-    if fs::metadata(&path)
-        .await
-        .map(|m| m.is_dir())
-        .unwrap_or(false)
-    {
-        path.push("index.html");
+    let mut relative = file_request.path.clone();
+    if file_request.directory {
+        relative = index_path(&relative);
     }
-
-    serve_static(&path, is_head).await
+    let mut path = base_dir.as_ref().join(&relative);
+    if !file_request.directory
+        && let Ok(metadata) = fs::metadata(&path).await
+        && metadata.is_dir()
+    {
+        path = base_dir.as_ref().join(index_path(&relative));
+    }
+    let missing = match fs::metadata(&path).await {
+        Ok(metadata) => !metadata.is_file(),
+        Err(err) => matches!(
+            err.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+        ),
+    };
+    if missing && let Some(fallback) = spa_fallback(&file_request.path, fallback) {
+        path = base_dir.as_ref().join(fallback);
+    }
+    serve_static(&path, file_request.is_head).await
 }
 
-pub async fn serve_static(path: &Path, is_head: bool) -> Result<Response<Body>, Box<dyn Error>> {
+/// Serves a trusted disk path; the caller is responsible for its document root.
+pub async fn serve_static(path: &Path, is_head: bool) -> Result<Response<Body>, StatusCode> {
     let metadata = match fs::metadata(path).await {
         Ok(metadata) if metadata.is_file() => metadata,
-        Ok(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))?);
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))?);
-        }
-        Err(err) => return Err(err.into()),
+        Ok(_) => return error_response(StatusCode::NOT_FOUND, is_head),
+        Err(err) => return io_error(err, is_head),
     };
-
-    let mut builder = Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, get_content_type(path))
-        .header(header::CONTENT_LENGTH, metadata.len().to_string());
-
-    if let Ok(modified) = metadata.modified() {
-        builder = builder.header(header::LAST_MODIFIED, httpdate::fmt_http_date(modified));
-    }
-
-    if is_head {
-        return Ok(builder.body(Body::empty())?);
-    }
-
-    let data = match fs::read(path).await {
-        Ok(data) => data,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))?);
+    let body = if is_head {
+        Body::empty()
+    } else {
+        match fs::read(path).await {
+            Ok(data) => Body::from(data),
+            Err(err) => return io_error(err, is_head),
         }
-        Err(err) => return Err(err.into()),
     };
-
-    Ok(builder.body(Body::from(data))?)
+    file_response(
+        path,
+        metadata.len(),
+        metadata.modified().ok(),
+        body,
+        is_head,
+    )
 }

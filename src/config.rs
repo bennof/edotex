@@ -84,15 +84,17 @@ struct PartialConfig {
 
 /// Command-line overrides for the configuration.
 #[derive(Debug, Parser)]
-#[command(version, about = "edotex configuration")]
+#[command(version, about = "edotex TeX compiler and HTTP server")]
 struct Args {
     #[arg(
+        index = 1,
         value_name = "MODE",
-        help = "Runtime mode to execute: build, install, or serve. Defaults to build."
+        help = "Runtime mode: build, install, or serve. Defaults to build."
     )]
     mode_or_input: Option<String>,
 
     #[arg(
+        index = 2,
         value_name = "INPUT",
         help = "Optional input file or directory, depending on the selected mode."
     )]
@@ -219,8 +221,10 @@ impl Config {
 
     /// Loads defaults, overlays JSON config if present, then applies CLI arguments.
     pub fn use_args() -> Result<Config, Box<dyn std::error::Error>> {
-        let args = Args::parse();
+        Self::from_args(Args::parse())
+    }
 
+    fn from_args(args: Args) -> Result<Config, Box<dyn std::error::Error>> {
         if let Some(path) = args.write_config.as_deref() {
             return Config::write_json(path);
         }

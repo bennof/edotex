@@ -29,22 +29,25 @@ VERSION := $(shell cargo pkgid | cut -d\# -f2)
 DOC_TEX := $(wildcard $(DOC_DIR)/*.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-.PHONY: all clean check cargo-check fmt run build install install-texmf doc clean-doc commit-version version push
+.PHONY: all clean check cargo-check fmt run build web install install-texmf doc clean-doc commit-version version push
 
-all: check build
+all:  build
 
 .PHONY: deps
 deps:
 	sh scripts/build-native-deps.sh
 
-check:
+check: web deps
 	cargo fmt --check
 	cargo check --all-targets --locked
-	cargo clippy -- -D warnings
-	cargo test
+	cargo check --lib --no-default-features --locked
+	cargo clippy --all-targets -- -D warnings
+	cargo clippy --lib --no-default-features -- -D warnings
+	cargo test --locked
 
-cargo-check:
+cargo-check: 
 	cargo check --all-targets --locked
+	cargo check --lib --no-default-features --locked
 
 fmt:
 	cargo fmt --all
@@ -52,43 +55,42 @@ fmt:
 run:
 	cargo run --
 
-build:
-	cargo build --release
+serve:
+	sh scripts/with-native-deps.sh cargo run -- serve
 
-install: build
+build: check  web
+	cargo build --release --locked
+
+# Build the editor into web/build/, which edotex embeds at compile time.
+# The submodule is only checked out when missing, so local work in web/ is kept.
+web:
+	test -f web/package.json || git submodule update --init web
+	cd web && npm ci && npm run build
+
+install: 
 	@echo "Installing $(BINARY_NAME) on $(SYSTEM_NAME) to $(INSTALL_DIR)"
 	install -d "$(INSTALL_DIR)"
-	install -m 755 "target/release/$(BINARY_NAME)" "$(INSTALL_DIR)/$(BINARY_NAME)"
-
-install-texmf:
-	cargo run -- install --local-dir "$(LOCAL_DIR)"
-
-update-texmf:
-	rsync -av  --exclude=/tex/latex/bflatex/fontconfig.tex ./texmf/ "$(LOCAL_DIR)/texmf/"
-
+	install -m 755 target/release/edotex "$(INSTALL_DIR)/"
 
 doc: $(DOC_PDF)
 
 $(DOC_DIR)/%.pdf: $(DOC_DIR)/%.tex
 	cargo run -- --local-dir "$(LOCAL_DIR)" "$<"
 
-clean-doc:
-	rm -f $(DOC_PDF)
 
 clean:
 	cargo clean
 	rm -rf "$(LOCAL_DIR)"
 	rm -f $(DOC_PDF)
+	rm -rf web/build web/.svelte-kit web/node_modules
 
 commit-version:
 	cargo check --all-targets
 	git add .
 	git commit -m "Version $(VERSION)"
 	git tag -a "v$(VERSION)"
+	git push
+	git push --tags
 
 version:
 	git describe --tags --exact-match
-
-push:
-	git push
-	git push --tags

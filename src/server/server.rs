@@ -53,6 +53,7 @@ impl Server {
             .layer(from_fn_with_state(Arc::clone(&server), logging_middleware));
 
         let listener = tokio::net::TcpListener::bind(&server.addr).await?;
+        Server::log(format!("listening on http://{}", listener.local_addr()?));
 
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_signal())

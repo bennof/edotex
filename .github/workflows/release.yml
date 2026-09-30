@@ -23,6 +23,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Install Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -56,6 +63,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Install Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -70,17 +84,19 @@ jobs:
         run: make build
 
       - name: Verify native linkage
-        run: sh scripts/check-native-linkage.sh "target/release/${BINARY_NAME}"
+        run: |
+          sh scripts/check-native-linkage.sh target/release/edotex
 
       - name: Smoke test
-        run: ./target/release/${BINARY_NAME} --version
+        run: |
+          ./target/release/edotex --version
 
       - name: Package
         shell: bash
         run: |
           mkdir -p dist
-          cp "target/release/${BINARY_NAME}" "dist/${BINARY_NAME}"
-          tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${BINARY_NAME}"
+          cp target/release/edotex dist/
+          tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" edotex
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6

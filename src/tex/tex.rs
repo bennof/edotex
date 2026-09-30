@@ -17,6 +17,7 @@ use tectonic_bridge_core::{SecuritySettings, SecurityStance};
 const DEFAULT_DIR: &str = "edotex";
 const INPUT_NAME: &str = "texput.tex";
 const OUTPUT_NAME: &str = "texput.pdf";
+const LOG_NAME: &str = "texput.log";
 
 /// Paths used by the embedded TeX compiler.
 #[allow(non_camel_case_types)]
@@ -161,11 +162,20 @@ impl std::error::Error for TeX_Error {}
 ///
 /// Nonempty `inject` code is prepended to the input, followed by a newline.
 /// It runs before the document, for example to define configuration macros.
+///
+/// Relative file names in the document, such as `\input{chapter}`, are searched
+/// first in `root`; `None` uses the current working directory.
+///
+/// With `tex_log`, the complete TeX log of the last pass (`texput.log`) is written
+/// to `out` and `output_log` after the run. It holds the LaTeX and package warnings
+/// that Tectonic does not report as status messages, e.g. undefined references.
 pub fn compile<W: Write>(
     env: &TeX_Env,
     input: Vec<u8>,
     out: &mut W,
     inject: Option<&str>,
+    root: Option<&Path>,
+    tex_log: bool,
 ) -> Result<TeX_Output, TeX_Error> {
     let input = match inject {
         Some(code) if !code.is_empty() => {
@@ -202,6 +212,9 @@ pub fn compile<W: Write>(
         .print_stdout(false)
         .output_format(OutputFormat::Pdf)
         .do_not_write_output_files();
+    if let Some(root) = root {
+        builder.filesystem_root(root);
+    }
 
     let mut session = match builder.create(&mut status) {
         Ok(session) => session,
@@ -211,14 +224,21 @@ pub fn compile<W: Write>(
     if let Err(err) = session.run(&mut status) {
         let engine_stdout = session.get_stdout_content();
         status.write_bytes(&engine_stdout);
+        let files = session.into_file_data();
+        if tex_log && let Some(log) = files.get(LOG_NAME) {
+            status.write_log(&log.data);
+        }
         let output_log = status.finish();
         return Err(TeX_Error::new(err.to_string(), output_log));
     }
 
     let engine_stdout = session.get_stdout_content();
     status.write_bytes(&engine_stdout);
-    let output_log = status.finish();
     let mut files = session.into_file_data();
+    if tex_log && let Some(log) = files.get(LOG_NAME) {
+        status.write_log(&log.data);
+    }
+    let output_log = status.finish();
     let pdf = files
         .remove(OUTPUT_NAME)
         .map(|file| file.data)
@@ -260,6 +280,14 @@ impl<'a, W: Write> CaptureStatus<'a, W> {
         let line = line.as_ref();
         self.write_bytes(line.as_bytes());
         self.write_bytes(b"\n");
+    }
+
+    /// Writes a complete file, ending it with a newline.
+    fn write_log(&mut self, bytes: &[u8]) {
+        self.write_bytes(bytes);
+        if !bytes.is_empty() && !bytes.ends_with(b"\n") {
+            self.write_bytes(b"\n");
+        }
     }
 
     fn write_bytes(&mut self, bytes: &[u8]) {

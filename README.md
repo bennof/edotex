@@ -10,6 +10,34 @@ that tree into a local data directory and uses its subdirectories as additional
 TeX search paths. Standard LaTeX resources are supplied by Tectonic and may be
 downloaded on first use.
 
+## Binary
+
+`edotex` compiles TeX documents locally, installs the TeX resources and serves
+the HTTP API with the embedded editor:
+
+```sh
+edotex document.tex
+edotex serve --host 127.0.0.1 --port 8080
+```
+
+It defaults to build mode. `serve` exposes `POST /api/tex` and serves the
+[editor](web/) from `web/build/` for all other paths; unknown `/api` paths
+return 404. The entry point is `src/bin/edotex.rs`.
+
+The editor is a Git submodule in `web/` and is embedded at compile time, so
+building from source needs Node.js 22.18 or newer. `make web` builds it, and
+`make check` and `make build` run it first. To build without make:
+
+```sh
+make web
+sh scripts/with-native-deps.sh cargo build --release
+```
+
+The `server` Cargo feature is enabled by default and required by the binary.
+Library users can disable it with `default-features = false` to drop the server
+modules, `tex::handle_tex` and their direct dependencies. Compiler dependencies
+may themselves use networking libraries.
+
 ## Quick start
 
 With the `edotex` binary on your `PATH`:
@@ -117,14 +145,15 @@ writable, and initial compilation may require network access.
 
 Development is supported on Linux and macOS. Prerequisites are Rust with
 rustfmt and Clippy, a C/C++ toolchain (Xcode tools on macOS), CMake, Make, curl,
-tar, xz and `shasum`.
+tar, xz, `shasum`, Git and Node.js 22.18 or newer with npm for the editor.
 
 ```sh
-make deps
-make check
 make build
 ./target/release/edotex --version
 ```
+
+`make build` runs `make check` first, which builds the editor and the native
+dependencies before checking and testing.
 
 `make deps` builds pinned, SHA-256-checked source archives locally under `.deps/`.
 It does not install Homebrew or install dependencies into system directories.
@@ -151,30 +180,32 @@ again. Keep `Cargo.lock` versioned and consistent with `Cargo.toml`.
 | Target | Action |
 | --- | --- |
 | `make deps` | Build local native dependencies. |
+| `make web` | Build the editor into `web/build/` (checks out the submodule if missing). |
 | `make fmt` | Format Rust code. |
-| `make cargo-check` | Run `cargo check --all-targets --locked`. |
-| `make check` | Check formatting, compile, run Clippy with warnings denied, and run tests. |
-| `make build` | Build `target/release/edotex`. |
-| `make install` | Build and install the binary. |
-| `make install-texmf` | Initialize the embedded TeX tree. |
+| `make cargo-check` | Run `cargo check` for all targets and for the library without default features. |
+| `make check` | Run `make web` and `make deps`, then check formatting, compile, run Clippy with warnings denied and run tests. |
+| `make build` | Run `make check`, then build `target/release/edotex`. |
+| `make run` | Run the debug binary in build mode. |
+| `make serve` | Start `edotex serve` from the debug build. |
+| `make install` | Install `target/release/edotex`; run `make build` first. |
 | `make doc` | Build documentation PDFs that are missing or older than their `.tex` source. |
-| `make clean-doc` | Remove generated documentation PDFs. |
-| `make clean` | Remove Cargo output, `LOCAL_DIR` and generated documentation PDFs. |
+| `make clean` | Remove Cargo output, `LOCAL_DIR`, generated documentation PDFs and editor build output. |
 
-Plain `make` runs checks and the release build; run `make deps` first on a fresh
-checkout. `make clean` retains `.deps/` but deletes the configured `LOCAL_DIR`.
+Plain `make` runs `make build`. `make clean` retains `.deps/` but deletes the
+configured `LOCAL_DIR`. Initialize the TeX tree with `edotex install`.
 
 The default binary installation prefix is `$HOME/.local` on Linux and
 `/usr/local` on macOS. Override it as needed:
 
 ```sh
+make build
 make install INSTALL_PREFIX="$HOME/.local"
 make doc LOCAL_DIR=/tmp/edotex-data
 ```
 
 The documentation sources are `article.tex`, `book.tex` and `tikz.tex` in
 [`texmf/doc/latex/bflatex`](texmf/doc/latex/bflatex). To rebuild all examples after
-changing a package, run `make clean-doc` followed by `make doc`.
+changing a package, delete the PDFs in that directory and run `make doc`.
 
 ## Releases
 
@@ -209,7 +240,7 @@ use edotex::tex::{compile, textree, TeX_Env};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env = TeX_Env::default();
-    textree::init(&env)?;
+    textree::init(&env, None)?;
 
     let input = std::fs::read("document.tex")?;
     let mut out = std::io::stdout();
@@ -218,16 +249,137 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         input,
         &mut out,
         Some(r"\newcommand{\usesolution}{nosolution}"),
+        None,
+        false,
     )?;
     std::fs::write("document.pdf", result.pdf)?;
     Ok(())
 }
 ```
 
-Pass `None` as the final argument to compile without injection. `TeX_Output`
+Pass `None` as `inject` to compile without injection. The last argument is the
+directory searched first for relative file names such as `\input{chapter}`;
+`None` uses the current working directory. With the final `tex_log` flag set,
+the complete TeX log of the last pass (`texput.log`) is written to the output
+and `output_log` after the run; it contains LaTeX and package warnings such as
+undefined references, which Tectonic does not report as status messages. `TeX_Output`
 contains `pdf` bytes and `output_log`. On failure, `TeX_Error` contains a message
 and the captured log. Tectonic status messages are also written to the supplied
 `std::io::Write` destination.
+
+### Embedded HTTP files
+
+`server::handle_embedded` serves a `rust-embed` asset type through Axum:
+
+```rust,no_run
+use axum::Router;
+use edotex::server::{Server, handle_embedded};
+use rust_embed::Embed;
+
+#[derive(Embed)]
+#[folder = "public/"]
+struct Assets;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let router = Router::new()
+        .fallback(|request| handle_embedded(request, Assets, Some("index.html")));
+    let mut server = Server::new("127.0.0.1:8080".into());
+    server.set_router(router);
+    server.listen().await
+}
+```
+
+Both `handle_static(request, base_dir, fallback)` and
+`handle_embedded(request, Assets, fallback)` return `Result<Response<Body>, StatusCode>` and share request validation, response
+headers and error responses. Disk I/O errors other than missing files are logged
+and produce HTTP 500. HEAD error responses also have no body.
+
+Create `public/` and its files before compiling. The `debug-embed` feature is
+enabled, so assets are embedded in both debug and release builds; rebuild after
+changing them. GET serves file bytes, HEAD returns headers without a body, and
+other methods receive 405. `/` and directory paths resolve to `index.html`;
+missing assets return 404. With `fallback`, e.g. `Some("index.html")` for a
+single-page app, missing paths without a file extension (`/doc/42`) serve that
+file with 200; missing paths with an extension (`/app.js`) still return 404.
+Pass `None` to disable it. Responses include MIME type, length and, when
+available, the modification time. Parent path components are rejected. As with
+the disk handler, URL percent escapes are not decoded; conditional caching and
+Range requests are not implemented. Register this handler explicitly to serve
+files; `edotex serve` uses it with `Some("index.html")` for the editor.
+
+### Streaming TeX HTTP handler
+
+`tex::handle_tex(request, env, max_body_size, compile_slots)` accepts POST
+requests in one of two forms:
+
+- A raw body containing a complete TeX document.
+- `multipart/form-data`: the first part is the TeX document; every further part
+  is a supporting file stored under its relative `filename`, for example
+  `images/logo.png`. Missing, empty, absolute, `..` and duplicate file names
+  return 400.
+
+The TeX document stays in memory. Supporting files are written to a temporary
+directory, which is the compiler's root for relative file names and is removed
+after compilation. Single documents get an empty directory, so the server's
+working directory is not searched.
+
+```sh
+curl -F "tex=@main.tex" -F "file=@logo.png;filename=images/logo.png" \
+  http://127.0.0.1:8080/api/tex
+```
+
+`max_body_size` limits the whole body, including all parts; `None` accepts any
+size. Axum's `DefaultBodyLimit` does not apply. `compile_slots` is a shared
+semaphore limiting concurrent compilations; `None` means unlimited. Initialize
+the TeX tree once before serving:
+
+```rust,no_run
+use std::sync::Arc;
+
+use axum::{Router, routing::post};
+use edotex::{server::Server, tex::{TeX_Env, handle_tex, textree}};
+use tokio::sync::Semaphore;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let env = TeX_Env::default();
+    textree::init(&env, None)?;
+    let slots = Arc::new(Semaphore::new(4));
+    let router = Router::new().route("/compile", post(move |request| {
+        handle_tex(request, env.clone(), Some(20 * 1024 * 1024), Some(slots.clone()))
+    }));
+    let mut server = Server::new("127.0.0.1:8080".into());
+    server.set_router(router);
+    server.listen().await
+}
+```
+
+The response is `multipart/mixed` with a per-response boundary:
+
+1. An `application/json` part: `{"type":"progress","status":"processing"}`.
+2. An `application/x-ndjson` part containing compiler lines as
+   `{"type":"log","message":"..."}` records, streamed as they become available.
+3. On success, an `application/pdf` part with
+   `Content-Disposition: attachment; filename="result.pdf"` and binary PDF bytes.
+   On failure, an `application/json` part with `type: "error"`, `status: "failed"`
+   and `message`, without a PDF part.
+
+Each response ends with the closing multipart boundary. HTTP transport chunks
+are not part boundaries: clients must parse the multipart body. Compilation
+failures after streaming begins retain HTTP 200 and are reported in the JSON
+part. Before streaming, an empty/unreadable body or invalid upload returns 400,
+an oversized body 413, no free compile slot 503, and unsupported methods 405
+with `Allow: POST`.
+
+Compilation runs in `spawn_blocking`; a bounded channel applies backpressure to
+log output. Tectonic status messages, including box warnings and errors, arrive
+during the run; the engine stdout and the complete TeX log of the last pass
+(`texput.log`, with LaTeX and package warnings) follow at the end. Disconnecting a client closes the
+stream but does not cancel an already-running synchronous compilation. This
+handler uses the existing compiler configuration and adds no compilation timeout
+or sandbox for untrusted TeX. `edotex serve` exposes this handler at `POST /api/tex`; the example above
+uses `/compile` as a custom route.
 
 ## License
 
