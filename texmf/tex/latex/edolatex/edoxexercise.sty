@@ -96,14 +96,14 @@
   \stepcounter{subexercisepoints}%
   \stepcounter{pointfield}%
   \checkbox
-    {points_\theexercise_\thesubexercise_\thepointfield}{}%
+    {points-\arabic{exercise}-\thesubexercise-\thepointfield}{}%
 }
 
 \newcommand{\ppline}[1]{%
   \addtocounter{subexercisepoints}{#1}%
   \stepcounter{pointfield}%
   \FormLine
-    {points_\theexercise_\thesubexercise_\thepointfield}
+    {points-\arabic{exercise}-\thesubexercise-\thepointfield}
     {1cm}\,/\,#1%
 }
 
@@ -183,7 +183,7 @@
   
     % prepare solution entry
     \@tosolution{%
-      \hbox to \hsize{\hfill\textbf{\FormLine{Sum_Points_\theexercise}{1cm}\,/\,\theexercisepoints\space\pointsname}}
+      \hbox to \hsize{\hfill\textbf{\FormLine{Sum-Points-\arabic{exercise}}{1cm}\,/\,\theexercisepoints\space\pointsname}}
     }
   \fi
 
