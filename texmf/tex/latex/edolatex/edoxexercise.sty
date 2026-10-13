@@ -20,6 +20,8 @@
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesPackage{edoxexercise}[2026/04/21 Exercise and grading support for edox classes]
 
+
+
 %%% ------------------------------------------------------------
 %%% Language-dependent labels
 %%% ------------------------------------------------------------
@@ -49,6 +51,7 @@
 
 \providecounter[subsection]{exercise}
 \providecounter[exercise]{subexercise}
+\providecounter[subexercise]{pointfield}
 
 \providecounter{points}
 \providecounter{exercisepoints}
@@ -89,23 +92,49 @@
 %%%   \pp        → 1 point
 %%%   \pp[3]     → 3 points
 %%% ------------------------------------------------------------
+\newcommand{\ppcheckbox}{%
+  \stepcounter{subexercisepoints}%
+  \stepcounter{pointfield}%
+  \checkbox
+    {points_\theexercise_\thesubexercise_\thepointfield}{}%
+}
+
+\newcommand{\ppline}[1]{%
+  \addtocounter{subexercisepoints}{#1}%
+  \stepcounter{pointfield}%
+  \FormLine
+    {points_\theexercise_\thesubexercise_\thepointfield}
+    {1cm}\,/\,#1%
+}
+
 \providecommand{\pp}[1][1]{%
   \addtocounter{points}{#1}%
   \addtocounter{exercisepoints}{#1}%
-  \addtocounter{subexercisepoints}{#1}%  
+  %
   \if@points@show
     \if@solution@inside
       \kern2mm
       \ifcase#1
-        \or \ensuremath{\square}%
-        \or \ensuremath{\square\,\square}%
-        \or \ensuremath{\square\,\square\,\square}%
-        \else \rule{1cm}{0.4pt}\,/\,#1%
+        % 0
+      \or
+        \ppcheckbox
+      \or
+        \ppcheckbox\,\ppcheckbox
+      \or
+        \ppcheckbox\,\ppcheckbox\,\ppcheckbox
+      \else
+        \ppline{#1}%
       \fi
       \kern2mm
+    \else
+      % Wichtig: auch ohne Darstellung weiterzählen
+      \addtocounter{subexercisepoints}{#1}%
     \fi
+  \else
+    \addtocounter{subexercisepoints}{#1}%
   \fi
 }
+
 
 
 %%% ------------------------------------------------------------
@@ -154,7 +183,7 @@
   
     % prepare solution entry
     \@tosolution{%
-      \hbox to \hsize{\hfill\textbf{\rule{1cm}{0.4pt} / \theexercisepoints\space\pointsname}}
+      \hbox to \hsize{\hfill\textbf{\FormLine{Sum_Points_\theexercise}{1cm}\,/\,\theexercisepoints\space\pointsname}}
     }
   \fi
 

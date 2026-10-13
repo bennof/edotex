@@ -48,7 +48,7 @@
 % If \studentname is defined, it is printed automatically.
 % ------------------------------------------------------------
 \newcommand*\edo@namefield{%
-  Name: \ifcsname studentname\endcsname \studentname\else \underline{\hspace{6cm}}\fi
+  Name: \ifcsname studentname\endcsname \studentname\else \FormLine{Name}{6cm}\fi
 }
 
 % ------------------------------------------------------------
@@ -140,6 +140,7 @@
   \stepcounter{worksheet}%
   \worksheettitle{\worksheetname}{#2}%
   \begingroup
+  \begin{Form}
   \edef\ws@mode{#1}%
   \parindent=0pt
   \let\section\wssection 
@@ -150,6 +151,7 @@
     \printsolutions%
     \clearpage
   \fi
+  \end{Form}
   \endgroup
   \pagestyle{\ws@savedpagestyle}%
 }
@@ -163,6 +165,7 @@
   \stepcounter{worksheet}%
   \worksheettitle{\testname}{#2}%
   \begingroup
+  \begin{Form}
   \edef\ws@mode{#1}%
   \parindent=0pt
   \@points@showtrue
@@ -174,6 +177,7 @@
     \printsolutions%
     \clearpage
   \fi
+  \end{Form}
   \endgroup
   \pagestyle{\ws@savedpagestyle}%
 }
@@ -188,15 +192,15 @@
 
 \providecommand{\examsummary}[1][]{
   \printsolutions
-  \hfill\textbf{\totalname: \underline{\hspace{1cm}}/ \thepoints\space\pointsname}
+  \hfill\textbf{\totalname: \FormLine{Sum_Points_Total}{1cm}\,/\,\thepoints\space\pointsname}
   
   \gradestable{\c@points}
   
   \vskip 1mm
-  \noindent\textbf{\gradename: \underline{\hspace{4cm}}}
+  \noindent\textbf{\gradename: \FormLine{Grade}{4cm}}
 
   \vskip1cm
-  \noindent \underline{\hspace{4cm}}\\
+  \noindent \FormLine{Signature}{4cm}\\
   \noindent #1
 }
 
@@ -209,6 +213,7 @@
   \stepcounter{worksheet}%
   \worksheettitle{\examname}{#2}%
   \begingroup
+  \begin{Form}
   \edef\ws@mode{#1}%
   \parindent=0pt
   \@points@showtrue
@@ -221,6 +226,7 @@
     \examsummary[\sign]
     \clearpage
   \fi
+  \end{Form}
   \endgroup
   \pagestyle{\ws@savedpagestyle}%
 }

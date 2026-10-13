@@ -33,6 +33,11 @@
 \RequirePackage{graphicx}
 \graphicspath{{figures/}}
 
+% ------------------------------------------------------------
+% Forms
+% ------------------------------------------------------------
+\RequirePackage{hyperref}
+
 
 % ------------------------------------------------------------
 % EDOX subsystems
@@ -66,4 +71,24 @@
 }
 {%
   \end{list}
+}
+
+\newcommand{\FormLine}[2]{%
+  \makebox[#2][l]{%
+    \rule[-2pt]{#2}{0.4pt}%
+    \hspace{-#2}%
+    \raisebox{-2pt}[0pt][0pt]{%
+      \TextField[
+        name=#1,
+        width=#2,
+        height=\dimexpr\f@size pt+2pt\relax,
+        borderwidth=0,
+        bordercolor={}
+      ]{}%
+    }%
+  }%
+}
+
+\newcommand{\checkbox}[2]{%
+  \CheckBox[name=#1,width=8pt,height=8pt]{} #2
 }
