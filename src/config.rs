@@ -17,6 +17,8 @@ pub enum Mode {
     Install,
     /// Start the edotex server.
     Serve,
+    /// Render one page of a PDF as PNG.
+    Pdf2png,
 }
 
 /// Server binding configuration.
@@ -44,9 +46,12 @@ pub struct Config {
     /// Optional input path for modes that need one.
     #[serde(skip)]
     pub input: Option<PathBuf>,
-    /// Optional output path override for build mode.
+    /// Optional output path override for build and pdf2png mode.
     #[serde(skip)]
     pub output: Option<PathBuf>,
+    /// Page for pdf2png mode, starting at 1; `None` means the first page.
+    #[serde(skip)]
+    pub page: Option<u32>,
     /// TeX code supplied on the command line, prepended to the document.
     #[serde(skip)]
     pub inject: Option<String>,
@@ -89,7 +94,7 @@ struct Args {
     #[arg(
         index = 1,
         value_name = "MODE",
-        help = "Runtime mode: build, install, or serve. Defaults to build."
+        help = "Runtime mode: build, install, serve, or pdf2png. Defaults to build."
     )]
     mode_or_input: Option<String>,
 
@@ -164,9 +169,19 @@ struct Args {
         short = 'o',
         long = "output",
         value_name = "PATH",
-        help = "Output PDF path. Defaults to the input path with its extension changed to .pdf."
+        help = "Output path. build: .pdf, or .png for the first page as image; pdf2png: .png. \
+                Defaults to the input path with its extension changed to .pdf (build) or .png (pdf2png)."
     )]
     output: Option<PathBuf>,
+
+    #[arg(
+        short = 's',
+        long = "page",
+        value_name = "PAGE",
+        value_parser = clap::value_parser!(u32).range(1..),
+        help = "Page to render in pdf2png mode, starting at 1. Defaults to 1."
+    )]
+    page: Option<u32>,
     #[arg(short = 'f', long = "force", help = "force overwrite current settings")]
     force: bool,
 }
@@ -180,6 +195,7 @@ impl Default for Config {
             mode: Mode::Build,
             input: None,
             output: None,
+            page: None,
             inject: None,
             force: false,
             server: ServerConfig {
@@ -274,6 +290,7 @@ impl Config {
         self.inject = args.inject;
         self.force = args.force;
         self.output = args.output;
+        self.page = args.page;
         if let Some(port) = args.server_port {
             self.server.port = port;
         }
