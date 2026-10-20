@@ -192,7 +192,7 @@
 
 \providecommand{\examsummary}[1][]{
   \printsolutions
-  \hfill\textbf{\totalname: \FormLine{Sum_Points_Total}{1cm}\,/\,\thepoints\space\pointsname}
+  \hfill\textbf{\totalname: \FormLine{SumPointsTotal}{1cm}\,/\,\thepoints\space\pointsname}
   
   \gradestable{\c@points}
   
@@ -200,7 +200,8 @@
   \noindent\textbf{\gradename: \FormLine{Grade}{4cm}}
 
   \vskip1cm
-  \noindent \FormLine{Signature}{4cm}\\
+  % date of correction (form field), room for the handwritten signature on the same line
+  \noindent \FormLine{CheckDate}{6cm}\\
   \noindent #1
 }
 
