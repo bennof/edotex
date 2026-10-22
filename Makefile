@@ -3,6 +3,8 @@
 
 SYSTEM_NAME := $(shell uname -s)
 BINARY_NAME := edotex
+# Release archives ship the binary next to this Makefile; in the repo it is built to target/release.
+BINARY_PATH ?= $(if $(wildcard ./$(BINARY_NAME)),./$(BINARY_NAME),target/release/$(BINARY_NAME))
 
 # Prefer the project-local native libraries when make deps has installed them.
 NATIVE_PREFIX := $(CURDIR)/.deps/install
@@ -25,11 +27,11 @@ INSTALL_DIR ?= $(INSTALL_PREFIX)/bin
 LOCAL_DIR ?= $(HOME)/.local/$(BINARY_NAME)
 DOC_DIR ?= texmf/doc/latex/bflatex
 
-VERSION := $(shell cargo pkgid | cut -d\# -f2)
+VERSION := $(shell cargo pkgid 2>/dev/null | cut -d\# -f2)
 DOC_TEX := $(wildcard $(DOC_DIR)/*.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-.PHONY: all clean check cargo-check fmt run build web install install-texmf doc clean-doc commit-version version push
+.PHONY: all clean check cargo-check fmt run build web install install-server install-texmf doc clean-doc commit-version version push
 
 all:  build
 
@@ -70,7 +72,24 @@ web:
 install: 
 	@echo "Installing $(BINARY_NAME) on $(SYSTEM_NAME) to $(INSTALL_DIR)"
 	install -d "$(INSTALL_DIR)"
-	install -m 755 target/release/edotex "$(INSTALL_DIR)/"
+	install -m 755 "$(BINARY_PATH)" "$(INSTALL_DIR)/"
+
+install-server:
+	test "$(SYSTEM_NAME)" = Linux || { echo "Server installation is only supported on Linux."; exit 1; }
+	test "$$(id -u)" = 0 || { echo "Run as root: sudo make install-server"; exit 1; }
+	install -m 755 "$(BINARY_PATH)" /usr/local/bin/edotex
+	id edotex >/dev/null 2>&1 || useradd --system --home /var/lib/edotex --shell /usr/sbin/nologin edotex
+	install -d -m 755 /etc/edotex
+	install -d -m 750 -o edotex -g edotex /var/lib/edotex
+	test -f /etc/edotex/config.json || install -m 644 deploy/config.json /etc/edotex/config.json
+	# nginx snippet: only when nginx is installed; never overwrite local changes (e.g. auth).
+	if [ -d /etc/nginx ]; then \
+		install -d -m 755 /etc/nginx/snippets; \
+		test -f /etc/nginx/snippets/edotex.conf || install -m 644 deploy/nginx/snippets/edotex.conf /etc/nginx/snippets/edotex.conf; \
+	fi
+	install -m 644 deploy/edotex.service /etc/systemd/system/edotex.service
+	systemctl daemon-reload
+	systemctl try-restart edotex
 
 doc: $(DOC_PDF)
 

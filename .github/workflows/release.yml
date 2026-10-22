@@ -132,9 +132,13 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          mkdir -p dist
-          cp target/release/edotex dist/
-          tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" edotex
+          # Archive: <archive>/edotex, Makefile and deploy/ for make install / install-server.
+          dir="dist/${{ matrix.target.archive }}"
+          mkdir -p "$dir"
+          cp target/release/edotex Makefile "$dir/"
+          cp -R deploy "$dir/"
+          tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${{ matrix.target.archive }}"
+          tar -tzf "${{ matrix.target.archive }}.tar.gz"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6

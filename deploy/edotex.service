@@ -1,0 +1,18 @@
+[Unit]
+Description=edotex TeX server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=edotex
+Group=edotex
+WorkingDirectory=/var/lib/edotex
+ExecStart=/usr/local/bin/edotex -c /etc/edotex/config.json serve
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/edotex
+
+[Install]
+WantedBy=multi-user.target
