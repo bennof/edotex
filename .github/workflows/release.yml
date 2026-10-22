@@ -54,7 +54,7 @@ jobs:
         run: make check
 
   build:
-    name: Build ${{ matrix.target.os }}
+    name: Build ${{ matrix.target.archive }}
     needs: check
     runs-on: ${{ matrix.target.os }}
     strategy:
