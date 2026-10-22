@@ -14,7 +14,7 @@ docker run --rm \
         apk add --no-cache build-base cmake curl perl perl-utils python3 \
             linux-headers git nodejs npm
         # Files written by root must stay usable for later steps on the host.
-        trap "chown -R \$HOST_UID:\$HOST_GID /src/.deps /src/target /src/web 2>/dev/null || true" EXIT
+        trap "chown -R \$HOST_UID:\$HOST_GID /src/.deps /src/target /src/web /usr/local/cargo/registry 2>/dev/null || true" EXIT
         git config --global --add safe.directory "*"
         sh scripts/build-native-deps.sh
         make web

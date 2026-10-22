@@ -105,6 +105,12 @@ jobs:
         if: ${{ matrix.target.musl }}
         run: JOBS=4 sh scripts/build-linux-musl.sh
 
+      # The container runs as root; rust-cache needs the files back to clean and save.
+      - name: Restore file ownership
+        if: ${{ always() && matrix.target.musl }}
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.cargo" target .deps web 2>/dev/null || true
+
       - name: Verify static binary
         if: ${{ matrix.target.musl }}
         run: |
