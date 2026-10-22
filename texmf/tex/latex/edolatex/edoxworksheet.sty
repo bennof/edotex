@@ -83,7 +83,13 @@
 % Helper commands
 % ------------------------------------------------------------
 \providecommand{\setpoints}[1]{\setcounter{points}{#1}}
-\providecommand{\sign}{}
+\providecommand{\sign}{\TextField[
+        name=Signature,
+        width=6cm,
+        height=\dimexpr\f@size pt+2pt\relax,
+        borderwidth=0,
+        bordercolor={}
+      ]{}}
 
 % ------------------------------------------------------------
 % Worksheet title support

@@ -251,13 +251,13 @@
   \IfBooleanTF{#1}{%
     \IfNoValueTF{#2}
       {\@tosolution{\noindent\textbf{\exercisename: }}
-       \textbf{\exercisename:}\par\noindent\ignorespaces#3\smallskip}
+       \textbf{\exercisename:}\par\nobreak\noindent\ignorespaces#3\smallskip}
       {\@tosolution{\noindent\textbf{#2: }}
-       \textbf{#2}\par\noindent\ignorespaces#3\smallskip}%
+       \textbf{#2}\par\nobreak\noindent\ignorespaces#3\smallskip}%
   }{%
     \IfNoValueTF{#2}
       {\@tosolution{\noindent\textbf{\exercisename~\arabic{exercise}: }}
-       \textbf{\exercisename~\arabic{exercise}:}\par\noindent\ignorespaces#3\smallskip}
+       \textbf{\exercisename~\arabic{exercise}:}\par\nobreak\noindent\ignorespaces#3\smallskip}
       {\@tosolution{\noindent\textbf{\exercisename~\arabic{exercise}: }}
        \textbf{\exercisename~\arabic{exercise}: #2}\par\noindent\ignorespaces#3\smallskip}%
   }
@@ -266,6 +266,7 @@
   \exercise@points
   \@tosolution{\smallskip}
   \endgroup
+  \penalty-200
 }
 
 
@@ -291,4 +292,5 @@
   \endgroup
   \ignorespaces
   \subexercise@points
+  \penalty-100
 }
