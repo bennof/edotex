@@ -63,10 +63,13 @@ jobs:
         target:
           - os: ubuntu-latest
             archive: edotex-linux-x86_64
+            musl: true
           - os: ubuntu-24.04-arm
             archive: edotex-linux-aarch64
+            musl: true
           - os: macos-latest
             archive: edotex-macos-aarch64
+            musl: false
 
     steps:
       - name: Checkout
@@ -75,23 +78,44 @@ jobs:
           submodules: true
 
       - name: Install Node
+        if: ${{ !matrix.target.musl }}
         uses: actions/setup-node@v5
         with:
           node-version: 22
 
       - name: Install Rust
+        if: ${{ !matrix.target.musl }}
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target.musl && 'musl' || 'native' }}
 
       - name: Build native dependencies
+        if: ${{ !matrix.target.musl }}
         run: make deps
 
       - name: Build
+        if: ${{ !matrix.target.musl }}
         run: make build
 
+      # Static musl binary built in an Alpine container; runs on any Linux distribution.
+      - name: Build (static musl)
+        if: ${{ matrix.target.musl }}
+        run: JOBS=4 sh scripts/build-linux-musl.sh
+
+      - name: Verify static binary
+        if: ${{ matrix.target.musl }}
+        run: |
+          readelf -d target/release/edotex | tee linkage.txt || true
+          if grep -q NEEDED linkage.txt; then
+            echo "::error::Binary is not fully static"
+            exit 1
+          fi
+
       - name: Verify native linkage
+        if: ${{ !matrix.target.musl }}
         run: |
           sh scripts/check-native-linkage.sh target/release/edotex
 

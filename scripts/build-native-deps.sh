@@ -92,6 +92,9 @@ build_cmake() {
 sed 's/TARGET_SONAME_FILE:graphite2/TARGET_FILE:graphite2/g' \
     "$DEPS/src/graphite-1.3.14/src/CMakeLists.txt" > "$DEPS/build/graphite-CMakeLists.txt"
 cp "$DEPS/build/graphite-CMakeLists.txt" "$DEPS/src/graphite-1.3.14/src/CMakeLists.txt"
+# Graphite's tests miss <cstdint> and fail with newer GCC (e.g. Alpine); only the library is needed.
+sed '/add_subdirectory(tests)/d' "$DEPS/src/graphite-1.3.14/CMakeLists.txt" > "$DEPS/build/graphite-top-CMakeLists.txt"
+cp "$DEPS/build/graphite-top-CMakeLists.txt" "$DEPS/src/graphite-1.3.14/CMakeLists.txt"
 # On Linux a Graphite example links FreeType. Once our static FreeType is installed
 # (a repeated run), it would be found without its own dependencies and fail to link.
 build_cmake graphite graphite-1.3.14 -DCMAKE_DISABLE_FIND_PACKAGE_Freetype=ON
@@ -103,7 +106,8 @@ build_cmake freetype freetype-VER-2-14-3 -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_B
 if [ "$SYSTEM_NAME" = Linux ]; then
     (
         cd "$DEPS/src/gperf-3.1"
-        ./configure --prefix="$PREFIX"
+        # gperf 3.1 predates C23, the default of GCC 15.
+        CFLAGS="$CFLAGS -std=gnu17" ./configure --prefix="$PREFIX"
         make -j "$JOBS"
         make install
     )
@@ -113,8 +117,12 @@ if [ "$SYSTEM_NAME" = Linux ]; then
     (
         cd "$DEPS/build/fontconfig"
         export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+        # pkgconf treats its own prefix as a system path and would drop -I$PREFIX/include.
+        export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
         export FREETYPE_LIBS="$(pkg-config --static --libs freetype2)"
         export EXPAT_LIBS="$(pkg-config --static --libs expat)"
+        export FREETYPE_CFLAGS="$(pkg-config --cflags freetype2)"
+        export EXPAT_CFLAGS="$(pkg-config --cflags expat)"
         "$DEPS/src/fontconfig-2.16.0/configure" --prefix="$PREFIX" \
             --disable-shared --enable-static --disable-docs --disable-nls \
             --disable-cache-build --sysconfdir=/etc --localstatedir=/var \
