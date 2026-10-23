@@ -13,6 +13,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/edotex
+# Compile requests use temporary directories; ProtectSystem=strict makes /tmp read-only.
+PrivateTmp=yes
 
 [Install]
 WantedBy=multi-user.target

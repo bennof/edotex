@@ -3,7 +3,7 @@
 `edotex` is the Rust successor to `gotex`: a command-line tool and library for
 compiling LaTeX documents with Tectonic and an embedded TeX tree.
 
-Current version: **0.1.0-rc.1** (release candidate).
+Current version: **0.2.0-alpha.5** (alpha).
 
 The binary includes the classes, packages and fonts from `texmf/`. It extracts
 that tree into a local data directory and uses its subdirectories as additional
@@ -17,12 +17,23 @@ the HTTP API with the embedded editor:
 
 ```sh
 edotex document.tex
+edotex document.tex -o page1.png
+edotex pdf2png document.pdf --page 2
 edotex serve --host 127.0.0.1 --port 8080
 ```
 
-It defaults to build mode. `serve` exposes `POST /api/tex` and serves the
+It defaults to build mode. With an `.png` output path, build mode writes the
+first page as an image; `pdf2png` renders one page of an existing PDF (both need
+the default `png` feature). `serve` exposes `POST /api/tex` (TeX to PDF) and
+`POST /api/png` (first page of a posted PDF as PNG) and serves the
 [editor](web/) from `web/build/` for all other paths; unknown `/api` paths
-return 404. The entry point is `src/bin/edotex.rs`.
+return 404. Request bodies are limited to 20 MiB and at most four compilations
+run at the same time. The entry point is `src/bin/edotex.rs`.
+
+`serve` answers CORS requests from any origin, including preflight `OPTIONS`
+requests. Allowed request headers are `Authorization` and `Content-Type`, so
+browser clients can send a bearer token, for example from a local development
+server.
 
 The editor is a Git submodule in `web/` and is embedded at compile time, so
 building from source needs Node.js 22.18 or newer. `make web` builds it, and
@@ -187,7 +198,8 @@ again. Keep `Cargo.lock` versioned and consistent with `Cargo.toml`.
 | `make build` | Run `make check`, then build `target/release/edotex`. |
 | `make run` | Run the debug binary in build mode. |
 | `make serve` | Start `edotex serve` from the debug build. |
-| `make install` | Install `target/release/edotex`; run `make build` first. |
+| `make install` | Install the binary into `INSTALL_DIR`; uses `./edotex` from a release archive, otherwise `target/release/edotex` (run `make build` first). |
+| `make install-server` | Linux only, as root: install edotex as a systemd service; see [Server deployment](#server-deployment). |
 | `make doc` | Build documentation PDFs that are missing or older than their `.tex` source. |
 | `make clean` | Remove Cargo output, `LOCAL_DIR`, generated documentation PDFs and editor build output. |
 
@@ -209,27 +221,94 @@ changing a package, delete the PDFs in that directory and run `make doc`.
 
 ## Releases
 
-The [GitHub workflow](.github/workflows/release.yml) checks changes on `main`,
-pull requests and `v*` tags, and can also be started manually. It defines these
-release archives:
+The [GitHub workflow](.github/workflows/release.yml) runs on `v*` tags and can
+be started manually:
+
+- **Tag push** (e.g. `v0.2.0-alpha.5`): checks that the tag matches the version
+  in `Cargo.toml`, runs `make check`, builds all archives and publishes a GitHub
+  release. Tags containing `-` (alpha, rc, ...) become prereleases.
+- **Manual run** (Actions → Release → Run workflow, or `gh workflow run
+  release.yml`): the same checks and builds for the selected branch, without
+  publishing. The archives are available as workflow artifacts.
+
+Pushes to `main` and pull requests do not trigger the workflow.
 
 | Platform | Archive |
 | --- | --- |
-| Linux x86_64 | `edotex-linux-x86_64.tar.gz` |
-| Linux ARM64 | `edotex-linux-aarch64.tar.gz` |
+| Linux x86_64 (static, musl) | `edotex-linux-x86_64.tar.gz` |
+| Linux ARM64 (static, musl) | `edotex-linux-aarch64.tar.gz` |
 | macOS ARM64 (Apple Silicon) | `edotex-macos-aarch64.tar.gz` |
 
-Each archive contains the `edotex` executable. The workflow builds local native
-dependencies, checks dynamic linkage and runs `edotex --version` before
-packaging. Tags such as `v0.1.0-rc.1` trigger publication to GitHub Releases.
-Windows and Intel macOS archives are not configured.
+Each archive contains one directory named like the archive, with the `edotex`
+executable, the `Makefile` and the `deploy/` files, so `make install` and
+`make install-server` work directly from the unpacked archive. Windows and
+Intel macOS archives are not configured.
 
-Third-party native libraries are linked statically. Operating-system libraries
-remain dynamic dependencies: macOS system frameworks and the Linux runtime,
-including libc and libstdc++. Linux also uses the host's `/etc/fonts`
-configuration. These are not fully static musl binaries; use a system runtime
-compatible with the build runner. The initial TeX resource downloads are still
-needed even when using a release binary.
+The Linux binaries are fully static: they are built against musl in an Alpine
+container ([`scripts/build-linux-musl.sh`](scripts/build-linux-musl.sh)) and
+run on any Linux distribution without further libraries. The workflow verifies
+that they have no dynamic dependencies. The macOS binary links third-party
+libraries statically and uses only system libraries and frameworks. Release
+binaries are stripped.
+
+Linux binaries still use the host's `/etc/fonts` configuration, and the first
+compilation downloads TeX resources over HTTPS, which requires CA certificates
+on the host (e.g. the `ca-certificates` package).
+
+To build the static Linux binary locally (needs Docker; builds for the host
+architecture), use a separate checkout: the script writes to `.deps/` and
+`target/`, which must not be shared with a macOS build.
+
+```sh
+sh scripts/build-linux-musl.sh
+```
+
+## Server deployment
+
+On a Linux server, `make install-server` (as root) sets up `edotex serve` as a
+systemd service. From an unpacked release archive:
+
+```sh
+tar -xzf edotex-linux-x86_64.tar.gz
+cd edotex-linux-x86_64
+sudo make install-server
+sudo systemctl enable --now edotex   # first installation only
+```
+
+It installs:
+
+| Path | Content |
+| --- | --- |
+| `/usr/local/bin/edotex` | The binary. |
+| `/etc/edotex/config.json` | Configuration from [`deploy/config.json`](deploy/config.json): port 8283 on `127.0.0.1`, data in `/var/lib/edotex`. Not overwritten if it exists. |
+| `/var/lib/edotex` | Data directory (TeX tree, caches), owned by the system user `edotex`. |
+| `/etc/systemd/system/edotex.service` | Service unit from [`deploy/edotex.service`](deploy/edotex.service). Always replaced. |
+| `/etc/nginx/snippets/edotex.conf` | nginx snippet, only if `/etc/nginx` exists. Not overwritten if it exists. |
+
+The target creates the `edotex` user if needed, reloads systemd and restarts a
+running service, so running it again updates an existing installation. The
+service runs as `edotex` with a read-only system (`ProtectSystem=strict`); only
+`/var/lib/edotex` and a private `/tmp` for compile requests are writable.
+
+The service listens on `127.0.0.1:8283` only. Publish it through a reverse
+proxy: include the [nginx snippet](deploy/nginx/snippets/edotex.conf) in a
+`server` block, then check and reload nginx:
+
+```nginx
+include snippets/edotex.conf;
+```
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The snippet maps `/edotex/api/` to the edotex API, allows 20 MiB request bodies,
+disables buffering so the compile log streams, and uses 300 s timeouts. Without
+an added access check the API is open to anyone who can reach the server; add
+authentication in the marked place. The editor location is commented out: the
+editor would have to be built with `kit.paths.base = '/edotex'` to work under
+that prefix. On SELinux systems, nginx may need
+`setsebool -P httpd_can_network_connect 1` to reach the service.
 
 ## Library API
 

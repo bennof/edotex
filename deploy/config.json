@@ -1,7 +1,7 @@
 {
   "server": {
     "port": 8283,
-    "server_name": "localhost"
+    "server_name": "127.0.0.1"
   },
   "tex": {
     "local_dir": "/var/lib/edotex"

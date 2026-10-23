@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Router,
     http::StatusCode,
@@ -16,7 +17,7 @@ use edotex::{
 };
 use rust_embed::Embed;
 use tokio::sync::Semaphore;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 /// Maximum size of a TeX request body (20 MiB).
 const MAX_BODY_SIZE: usize = 20 * 1024 * 1024;
@@ -158,8 +159,15 @@ async fn serve_mode(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/", any(|| async { StatusCode::NOT_FOUND }))
         // Other paths serve the editor; app routes like /doc/42 load its index.html.
         .fallback(|request| handle_embedded(request, Web, Some("index.html")))
-        // Accept requests from any origin, with any method and headers.
-        .layer(CorsLayer::permissive());
+        // Accept requests from any origin and method. Allowed headers are listed
+        // explicitly: the wildcard "*" does not cover Authorization (bearer tokens).
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers([AUTHORIZATION, CONTENT_TYPE])
+                .expose_headers(Any),
+        );
     let mut server = Server::new(cfg.server.bind_address());
     server.set_router(router);
     server.listen().await
