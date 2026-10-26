@@ -19,6 +19,9 @@ use rust_embed::Embed;
 use tokio::sync::Semaphore;
 use tower_http::cors::{Any, CorsLayer};
 
+#[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
+mod tray;
+
 /// Maximum size of a TeX request body (20 MiB).
 const MAX_BODY_SIZE: usize = 20 * 1024 * 1024;
 /// Maximum number of TeX compilations running at the same time.
@@ -173,12 +176,40 @@ async fn serve_mode(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     server.listen().await
 }
 
+/// Runs the server with a menu bar (tray) icon; only in desktop builds.
+fn tray_mode(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
+    return tray::run(cfg, serve_mode);
+    #[cfg(not(all(feature = "desktop", any(target_os = "macos", target_os = "windows"))))]
+    {
+        let _ = cfg;
+        Err("tray mode is not available in this build".into())
+    }
+}
+
+/// Whether the binary was double-clicked as a macOS app (no arguments, inside an `.app`).
+fn launched_as_app(cfg: &Config) -> bool {
+    #[cfg(all(feature = "desktop", target_os = "macos"))]
+    return matches!(cfg.mode, Mode::Build)
+        && cfg.input.is_none()
+        && tray::launched_from_app_bundle();
+    #[cfg(not(all(feature = "desktop", target_os = "macos")))]
+    {
+        let _ = cfg;
+        false
+    }
+}
+
 fn run(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    if launched_as_app(config) {
+        return tray_mode(config);
+    }
     match config.mode {
         Mode::Build => build_mode(config),
         Mode::Install => Ok(tex::textree::init(&config.tex, Some(config.force))?),
         Mode::Serve => serve_mode(config),
         Mode::Pdf2png => pdf2png_mode(config),
+        Mode::Tray => tray_mode(config),
     }
 }
 

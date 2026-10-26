@@ -17,12 +17,15 @@ endif
 
 ifeq ($(SYSTEM_NAME),Darwin)
 INSTALL_PREFIX ?= /usr/local
+# macOS builds include the menu bar app (edotex tray, edotex.app).
+CARGO_FEATURES ?= desktop
 else ifeq ($(SYSTEM_NAME),Linux)
 INSTALL_PREFIX ?= $(HOME)/.local
 else
 $(error Unsupported operating system: $(SYSTEM_NAME))
 endif
 
+CARGO_FEATURE_FLAGS := $(if $(CARGO_FEATURES),--features $(CARGO_FEATURES))
 INSTALL_DIR ?= $(INSTALL_PREFIX)/bin
 LOCAL_DIR ?= $(HOME)/.local/$(BINARY_NAME)
 DOC_DIR ?= texmf/doc/latex/bflatex
@@ -31,7 +34,7 @@ VERSION := $(shell cargo pkgid 2>/dev/null | cut -d\# -f2)
 DOC_TEX := $(wildcard $(DOC_DIR)/*.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-.PHONY: all clean check cargo-check fmt run build web install install-server install-texmf doc clean-doc commit-version version push
+.PHONY: all clean check cargo-check fmt run build web install install-server app install-texmf doc clean-doc commit-version version push
 
 all:  build
 
@@ -41,11 +44,11 @@ deps:
 
 check: web deps
 	cargo fmt --check
-	cargo check --all-targets --locked
+	cargo check --all-targets --locked $(CARGO_FEATURE_FLAGS)
 	cargo check --lib --no-default-features --locked
-	cargo clippy --all-targets -- -D warnings
+	cargo clippy --all-targets $(CARGO_FEATURE_FLAGS) -- -D warnings
 	cargo clippy --lib --no-default-features -- -D warnings
-	cargo test --locked
+	cargo test --locked $(CARGO_FEATURE_FLAGS)
 
 cargo-check: 
 	cargo check --all-targets --locked
@@ -61,7 +64,7 @@ serve:
 	sh scripts/with-native-deps.sh cargo run -- serve
 
 build: check  web
-	cargo build --release --locked
+	cargo build --release --locked $(CARGO_FEATURE_FLAGS)
 
 # Build the editor into web/build/, which edotex embeds at compile time.
 # The submodule is only checked out when missing, so local work in web/ is kept.
@@ -73,6 +76,11 @@ install:
 	@echo "Installing $(BINARY_NAME) on $(SYSTEM_NAME) to $(INSTALL_DIR)"
 	install -d "$(INSTALL_DIR)"
 	install -m 755 "$(BINARY_PATH)" "$(INSTALL_DIR)/"
+
+# macOS: package target/release/edotex as edotex.app in dist/edotex.dmg.
+app:
+	test "$(SYSTEM_NAME)" = Darwin || { echo "edotex.app is only built on macOS."; exit 1; }
+	sh scripts/build-macos-app.sh "$(BINARY_PATH)" dist/edotex.dmg
 
 install-server:
 	test "$(SYSTEM_NAME)" = Linux || { echo "Server installation is only supported on Linux."; exit 1; }

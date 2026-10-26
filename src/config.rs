@@ -19,6 +19,8 @@ pub enum Mode {
     Serve,
     /// Render one page of a PDF as PNG.
     Pdf2png,
+    /// Run the server in the background with a menu bar (tray) icon; desktop builds only.
+    Tray,
 }
 
 /// Server binding configuration.
@@ -94,7 +96,7 @@ struct Args {
     #[arg(
         index = 1,
         value_name = "MODE",
-        help = "Runtime mode: build, install, serve, or pdf2png. Defaults to build."
+        help = "Runtime mode: build, install, serve, pdf2png, or tray. Defaults to build."
     )]
     mode_or_input: Option<String>,
 

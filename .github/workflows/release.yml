@@ -140,11 +140,18 @@ jobs:
           tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${{ matrix.target.archive }}"
           tar -tzf "${{ matrix.target.archive }}.tar.gz"
 
+      # macOS: menu bar app edotex.app in a DMG, next to the CLI archive.
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: sh scripts/build-macos-app.sh target/release/edotex "${{ matrix.target.archive }}.dmg"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target.archive }}
-          path: ${{ matrix.target.archive }}.tar.gz
+          path: |
+            ${{ matrix.target.archive }}.tar.gz
+            ${{ matrix.target.archive }}.dmg
           if-no-files-found: error
 
   release:
@@ -166,5 +173,7 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: dist/*.tar.gz
+          files: |
+            dist/*.tar.gz
+            dist/*.dmg
           fail_on_unmatched_files: true

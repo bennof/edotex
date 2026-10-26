@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/edotex_logo_text.png" alt="edotex" width="240">
+</p>
+
 # edotex
 
 `edotex` is the Rust successor to `gotex`: a command-line tool and library for
@@ -199,6 +203,7 @@ again. Keep `Cargo.lock` versioned and consistent with `Cargo.toml`.
 | `make run` | Run the debug binary in build mode. |
 | `make serve` | Start `edotex serve` from the debug build. |
 | `make install` | Install the binary into `INSTALL_DIR`; uses `./edotex` from a release archive, otherwise `target/release/edotex` (run `make build` first). |
+| `make app` | macOS only: package the built binary as `edotex.app` in `dist/edotex.dmg`. |
 | `make install-server` | Linux only, as root: install edotex as a systemd service; see [Server deployment](#server-deployment). |
 | `make doc` | Build documentation PDFs that are missing or older than their `.tex` source. |
 | `make clean` | Remove Cargo output, `LOCAL_DIR`, generated documentation PDFs and editor build output. |
@@ -238,6 +243,7 @@ Pushes to `main` and pull requests do not trigger the workflow.
 | Linux x86_64 (static, musl) | `edotex-linux-x86_64.tar.gz` |
 | Linux ARM64 (static, musl) | `edotex-linux-aarch64.tar.gz` |
 | macOS ARM64 (Apple Silicon) | `edotex-macos-aarch64.tar.gz` |
+| macOS ARM64 menu bar app | `edotex-macos-aarch64.dmg` |
 
 Each archive contains one directory named like the archive, with the `edotex`
 executable, the `Makefile` and the `deploy/` files, so `make install` and
@@ -262,6 +268,30 @@ architecture), use a separate checkout: the script writes to `.deps/` and
 ```sh
 sh scripts/build-linux-musl.sh
 ```
+
+## Desktop app (macOS)
+
+On macOS, edotex also runs as a menu bar app. Open `edotex-macos-aarch64.dmg`
+and drag `edotex.app` into Applications. A double-click starts the server in the
+background on `http://localhost:8283` (bound to `127.0.0.1`) and shows an icon in
+the menu bar, without a Dock icon or window. The menu shows the address, opens
+the editor, switches **Bei Anmeldung starten** (start at login) and quits the
+server. Opening the app again while it runs opens the editor in the browser. If
+port 8283 is already in use, the menu says so instead of starting a second
+server.
+
+Start at login is a LaunchAgent in
+`~/Library/LaunchAgents/xyz.falkner.edotex.plist`; it takes effect at the next
+login. The app uses the same data directory as the command line
+(`$HOME/.local/edotex`). From a terminal, `edotex tray` starts the same menu bar
+mode.
+
+The app is signed ad hoc, not with an Apple Developer ID, so Gatekeeper warns on
+first launch: open it once with right-click → Open, or remove the quarantine flag
+with `xattr -d com.apple.quarantine /Applications/edotex.app`.
+
+The menu bar mode is the Cargo feature `desktop`, which `make build` enables on
+macOS. Linux builds do not include it. There is no Windows version.
 
 ## Server deployment
 
