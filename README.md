@@ -7,7 +7,7 @@
 `edotex` is the Rust successor to `gotex`: a command-line tool and library for
 compiling LaTeX documents with Tectonic and an embedded TeX tree.
 
-Current version: **0.2.0-alpha.5** (alpha).
+Current version: **0.2.0-beta.1** (beta).
 
 The binary includes the classes, packages and fonts from `texmf/`. It extracts
 that tree into a local data directory and uses its subdirectories as additional
@@ -229,7 +229,7 @@ changing a package, delete the PDFs in that directory and run `make doc`.
 The [GitHub workflow](.github/workflows/release.yml) runs on `v*` tags and can
 be started manually:
 
-- **Tag push** (e.g. `v0.2.0-alpha.5`): checks that the tag matches the version
+- **Tag push** (e.g. `v0.2.0-beta.1`): checks that the tag matches the version
   in `Cargo.toml`, runs `make check`, builds all archives and publishes a GitHub
   release. Tags containing `-` (alpha, rc, ...) become prereleases.
 - **Manual run** (Actions → Release → Run workflow, or `gh workflow run
