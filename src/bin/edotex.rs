@@ -137,6 +137,9 @@ async fn serve_mode(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     tex::textree::init(&cfg.tex, None)?;
     let env = cfg.tex.clone();
     let compile_slots = Arc::new(Semaphore::new(MAX_CONCURRENT_COMPILES));
+    // /tex/png shares the environment and the compile limit with /tex.
+    #[cfg(feature = "png")]
+    let (png_env, png_slots) = (env.clone(), compile_slots.clone());
     let api = Router::new().route(
         "/tex",
         post(move |request| {
@@ -148,11 +151,24 @@ async fn serve_mode(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
             )
         }),
     );
-    // POST a PDF, get its first page as PNG.
+    // POST a PDF, get one page (`?page=N`, default 1) as PNG.
     #[cfg(feature = "png")]
     let api = api.route(
         "/png",
         post(|request| edotex::png::handler::handle_png(request, Some(MAX_BODY_SIZE))),
+    );
+    // POST TeX like /tex, get one page (`?page=N`, default 1) as PNG instead of the PDF.
+    #[cfg(feature = "png")]
+    let api = api.route(
+        "/tex/png",
+        post(move |request| {
+            tex::handle_tex_png(
+                request,
+                png_env.clone(),
+                Some(MAX_BODY_SIZE),
+                Some(png_slots.clone()),
+            )
+        }),
     );
     // Unknown API paths must not fall through to the editor fallback.
     let api = api.fallback(|| async { StatusCode::NOT_FOUND });

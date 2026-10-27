@@ -8,3 +8,5 @@ pub use engine::{TeX_Env, TeX_Error, TeX_Output, TeX_Outup, compile};
 
 #[cfg(feature = "server")]
 pub use handler::handle_tex;
+#[cfg(all(feature = "server", feature = "png"))]
+pub use handler::handle_tex_png;

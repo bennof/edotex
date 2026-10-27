@@ -7,7 +7,7 @@
 `edotex` is the Rust successor to `gotex`: a command-line tool and library for
 compiling LaTeX documents with Tectonic and an embedded TeX tree.
 
-Current version: **0.2.0-beta.1** (beta).
+Current version: **0.2.0-beta.2** (beta).
 
 The binary includes the classes, packages and fonts from `texmf/`. It extracts
 that tree into a local data directory and uses its subdirectories as additional
@@ -28,8 +28,11 @@ edotex serve --host 127.0.0.1 --port 8080
 
 It defaults to build mode. With an `.png` output path, build mode writes the
 first page as an image; `pdf2png` renders one page of an existing PDF (both need
-the default `png` feature). `serve` exposes `POST /api/tex` (TeX to PDF) and
-`POST /api/png` (first page of a posted PDF as PNG) and serves the
+the default `png` feature). `serve` exposes `POST /api/tex` (TeX to PDF),
+`POST /api/tex/png` (like `/api/tex`, but the result is one page as PNG) and
+`POST /api/png` (one page of a posted PDF as PNG). Both PNG endpoints take the
+page as query parameter, e.g. `?page=2`; without it they render page 1. The
+server serves the
 [editor](web/) from `web/build/` for all other paths; unknown `/api` paths
 return 404. Request bodies are limited to 20 MiB and at most four compilations
 run at the same time. The entry point is `src/bin/edotex.rs`.
@@ -229,7 +232,7 @@ changing a package, delete the PDFs in that directory and run `make doc`.
 The [GitHub workflow](.github/workflows/release.yml) runs on `v*` tags and can
 be started manually:
 
-- **Tag push** (e.g. `v0.2.0-beta.1`): checks that the tag matches the version
+- **Tag push** (e.g. `v0.2.0-beta.2`): checks that the tag matches the version
   in `Cargo.toml`, runs `make check`, builds all archives and publishes a GitHub
   release. Tags containing `-` (alpha, rc, ...) become prereleases.
 - **Manual run** (Actions → Release → Run workflow, or `gh workflow run

@@ -67,11 +67,91 @@ pub async fn handle_tex(
     .await
 }
 
+/// Like [`handle_tex`], but the last part is one page of the PDF as `image/png`
+/// (`result.png`) instead of the PDF. The page is chosen with the query parameter
+/// `page` (starting at 1, default 1); an invalid value gets 400 before compiling.
+/// A missing page is reported like a compilation error, as a JSON part.
+#[cfg(feature = "png")]
+pub async fn handle_tex_png(
+    request: Request,
+    env: TeX_Env,
+    max_body_size: Option<usize>,
+    compile_slots: Option<Arc<Semaphore>>,
+) -> Result<Response<Body>, StatusCode> {
+    let page = match crate::png::handler::requested_page(request.uri()) {
+        Ok(page) => page,
+        Err(reason) => return Rejection::bad_request(reason).response(),
+    };
+    handle_with_part(
+        request,
+        env,
+        max_body_size,
+        compile_slots,
+        PNG_PART,
+        move |env, input, root, writer| {
+            let output = compile(env, input, writer, None, Some(root), true)?;
+            match crate::png::pdf_to_png(output.pdf, page, crate::png::handler::SCALE) {
+                Some(png) => Ok(TeX_Output {
+                    pdf: png,
+                    output_log: output.output_log,
+                }),
+                None => Err(TeX_Error {
+                    message: format!("cannot render page {}: no such page", page + 1),
+                    output_log: output.output_log,
+                }),
+            }
+        },
+    )
+    .await
+}
+
+/// Content type and file name of the result part.
+struct ResultPart {
+    content_type: &'static str,
+    filename: &'static str,
+}
+
+const PDF_PART: ResultPart = ResultPart {
+    content_type: "application/pdf",
+    filename: "result.pdf",
+};
+
+#[cfg(feature = "png")]
+const PNG_PART: ResultPart = ResultPart {
+    content_type: "image/png",
+    filename: "result.png",
+};
+
 async fn handle_with<F>(
     request: Request,
     env: TeX_Env,
     max_body_size: Option<usize>,
     compile_slots: Option<Arc<Semaphore>>,
+    compiler: F,
+) -> Result<Response<Body>, StatusCode>
+where
+    F: FnOnce(&TeX_Env, Vec<u8>, &Path, &mut LogWriter) -> Result<TeX_Output, TeX_Error>
+        + Send
+        + 'static,
+{
+    handle_with_part(
+        request,
+        env,
+        max_body_size,
+        compile_slots,
+        PDF_PART,
+        compiler,
+    )
+    .await
+}
+
+/// `compiler` returns the result bytes in `TeX_Output::pdf`; `part` describes them.
+async fn handle_with_part<F>(
+    request: Request,
+    env: TeX_Env,
+    max_body_size: Option<usize>,
+    compile_slots: Option<Arc<Semaphore>>,
+    part: ResultPart,
     compiler: F,
 ) -> Result<Response<Body>, StatusCode>
 where
@@ -174,9 +254,11 @@ where
         match result {
             Ok(Ok(output)) => {
                 let pdf_headers = format!(
-                    "--{boundary}\r\nContent-Type: application/pdf\r\n\
-                     Content-Disposition: attachment; filename=\"result.pdf\"\r\n\
+                    "--{boundary}\r\nContent-Type: {}\r\n\
+                     Content-Disposition: attachment; filename=\"{}\"\r\n\
                      Content-Length: {}\r\n\r\n",
+                    part.content_type,
+                    part.filename,
                     output.pdf.len()
                 );
                 if send(&sender, pdf_headers).await.is_err() {
@@ -573,6 +655,54 @@ mod tests {
             status(request(Method::POST, body), None, None).await,
             StatusCode::BAD_REQUEST
         );
+    }
+
+    #[cfg(feature = "png")]
+    #[tokio::test]
+    async fn png_result_part_is_an_image() {
+        let response = handle_with_part(
+            request(Method::POST, "tex input"),
+            TeX_Env::default(),
+            None,
+            None,
+            PNG_PART,
+            |_, _, _, _| {
+                Ok(TeX_Output {
+                    pdf: b"\x89PNG\r\n\x1a\n".to_vec(),
+                    output_log: String::new(),
+                })
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("Content-Type: image/png\r\n"));
+        assert!(body.contains("filename=\"result.png\""));
+        assert!(!body.contains("application/pdf"));
+    }
+
+    #[cfg(feature = "png")]
+    #[tokio::test]
+    async fn tex_png_rejects_invalid_pages_before_compiling() {
+        for uri in ["/api/tex/png?page=0", "/api/tex/png?page=abc"] {
+            let request = Request::builder()
+                .method(Method::POST)
+                .uri(uri)
+                .body(Body::from("tex input"))
+                .unwrap();
+            let response = handle_tex_png(request, TeX_Env::default(), None, None)
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(String::from_utf8_lossy(&body).starts_with("invalid page"));
+        }
+        let response = handle_tex_png(request(Method::GET, ""), TeX_Env::default(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 
     #[tokio::test]

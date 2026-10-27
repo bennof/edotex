@@ -1,18 +1,35 @@
-//! HTTP interface: POST a PDF, get its first page as PNG.
+//! HTTP interface: POST a PDF, get one page as PNG.
 use std::error::Error;
 
 use axum::{
     body::{Body, to_bytes},
     extract::Request,
-    http::{Method, Response, StatusCode, header},
+    http::{Method, Response, StatusCode, Uri, header},
 };
 
 use super::pdf_to_png;
 
 /// Render scale; 2.0 ≈ 144 dpi.
-const SCALE: f32 = 2.0;
+pub(crate) const SCALE: f32 = 2.0;
 
-/// Renders the first page of the PDF in a POST body and answers with `image/png`.
+/// Reads the `page` query parameter (starting at 1) as a 0-based page index.
+/// Without the parameter the first page is used.
+pub fn requested_page(uri: &Uri) -> Result<usize, String> {
+    let mut page = 0;
+    for pair in uri.query().unwrap_or_default().split('&') {
+        if let Some(value) = pair.strip_prefix("page=") {
+            page = value
+                .parse::<usize>()
+                .ok()
+                .and_then(|page| page.checked_sub(1))
+                .ok_or_else(|| format!("invalid page {value:?}: use a number from 1"))?;
+        }
+    }
+    Ok(page)
+}
+
+/// Renders one page of the PDF in a POST body and answers with `image/png`.
+/// The page is chosen with the query parameter `page` (starting at 1, default 1).
 /// Rejected requests (400, 405, 413, 422) carry a plain-text reason in the body.
 ///
 /// `max_body_size` limits the request body; larger bodies get 413. `None` accepts any
@@ -29,6 +46,10 @@ pub async fn handle_png(
             .body(Body::empty())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
     }
+    let page = match requested_page(request.uri()) {
+        Ok(page) => page,
+        Err(reason) => return text(StatusCode::BAD_REQUEST, reason),
+    };
     let limit = max_body_size.unwrap_or(usize::MAX);
     // Reject announced oversized bodies without reading them.
     let content_length = request
@@ -60,7 +81,7 @@ pub async fn handle_png(
     }
 
     // A panic in the renderer ends the blocking task, not the server.
-    match tokio::task::spawn_blocking(move || pdf_to_png(pdf, 0, SCALE)).await {
+    match tokio::task::spawn_blocking(move || pdf_to_png(pdf, page, SCALE)).await {
         Ok(Some(png)) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "image/png")
@@ -68,7 +89,7 @@ pub async fn handle_png(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR),
         Ok(None) | Err(_) => text(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "not a readable PDF or no first page",
+            format!("not a readable PDF or no page {}", page + 1),
         ),
     }
 }
@@ -176,8 +197,47 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
             body(response).await,
-            b"not a readable PDF or no first page".to_vec()
+            b"not a readable PDF or no page 1".to_vec()
         );
+    }
+
+    fn request_to(uri: &str, body: impl Into<Body>) -> Request {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .body(body.into())
+            .unwrap()
+    }
+
+    #[test]
+    fn reads_the_page_parameter() {
+        let page = |uri: &str| requested_page(&uri.parse().unwrap());
+        assert_eq!(page("/api/png"), Ok(0));
+        assert_eq!(page("/api/png?page=1"), Ok(0));
+        assert_eq!(page("/api/png?x=1&page=3"), Ok(2));
+        assert!(page("/api/png?page=0").is_err());
+        assert!(page("/api/png?page=abc").is_err());
+        assert!(page("/api/png?page=").is_err());
+    }
+
+    #[tokio::test]
+    async fn renders_the_requested_page() {
+        let response = handle_png(request_to("/api/png?page=1", small_pdf()), None)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = handle_png(request_to("/api/png?page=2", small_pdf()), None)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            body(response).await,
+            b"not a readable PDF or no page 2".to_vec()
+        );
+        let response = handle_png(request_to("/api/png?page=0", small_pdf()), None)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

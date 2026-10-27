@@ -63,26 +63,21 @@ pub fn run(
         let _ = proxy.send_event(UserEvent::Menu(event));
     }));
 
-    // A busy port usually means edotex already runs, e.g. started from a terminal.
-    let port_free = TcpListener::bind((HOST, PORT)).is_ok();
-    if port_free {
-        let proxy = event_loop.create_proxy();
-        thread::spawn(move || {
-            if let Err(err) = serve(&cfg) {
-                let _ = proxy.send_event(UserEvent::ServerFailed(err.to_string()));
-            }
-        });
+    // A busy port means edotex already runs (another app instance or `edotex serve`):
+    // open the editor there instead of showing a second menu bar icon.
+    if TcpListener::bind((HOST, PORT)).is_err() {
+        eprintln!("edotex already runs on port {PORT}; opening {url}");
+        open_url(&url);
+        return Ok(());
     }
+    let proxy = event_loop.create_proxy();
+    thread::spawn(move || {
+        if let Err(err) = serve(&cfg) {
+            let _ = proxy.send_event(UserEvent::ServerFailed(err.to_string()));
+        }
+    });
 
-    let status = MenuItem::new(
-        if port_free {
-            format!("edotex läuft auf {url}")
-        } else {
-            format!("Port {PORT} ist belegt – läuft edotex schon?")
-        },
-        true,
-        None,
-    );
+    let status = MenuItem::new(format!("edotex läuft auf {url}"), true, None);
     let open = MenuItem::new("Editor öffnen", true, None);
     let login = CheckMenuItem::new(
         "Bei Anmeldung starten",
