@@ -208,17 +208,21 @@ again. Keep `Cargo.lock` versioned and consistent with `Cargo.toml`.
 | `make install` | Install the binary into `INSTALL_DIR`; uses `./edotex` from a release archive, otherwise `target/release/edotex` (run `make build` first). |
 | `make app` | macOS only: package the built binary as `edotex.app` in `dist/edotex.dmg`. |
 | `make install-server` | Linux only, as root: install edotex as a systemd service; see [Server deployment](#server-deployment). |
+| `make licenses` | Write `THIRD_PARTY_LICENSES.md` with the licenses of all shipped dependencies (Rust crates via `cargo-about`, native libraries, web editor, fonts); installs `cargo-about` if missing and needs `make deps` and `make web`. Hand-written parts live in `licenses/`. |
 | `make doc` | Build documentation PDFs that are missing or older than their `.tex` source. |
 | `make clean` | Remove Cargo output, `LOCAL_DIR`, generated documentation PDFs and editor build output. |
 
 Plain `make` runs `make build`. `make clean` retains `.deps/` but deletes the
 configured `LOCAL_DIR`. Initialize the TeX tree with `edotex install`.
 
-The default binary installation prefix is `$HOME/.local` on Linux and
-`/usr/local` on macOS. Override it as needed:
+The default binary installation prefix is `/usr/local`, so the binary lands in
+`/usr/local/bin`, which is on every user's `PATH` and is also used by the
+systemd service. Installing there needs root (`sudo make install`). For a
+single user without root, override the prefix:
 
 ```sh
 make build
+sudo make install
 make install INSTALL_PREFIX="$HOME/.local"
 make doc LOCAL_DIR=/tmp/edotex-data
 ```
@@ -496,6 +500,9 @@ uses `/compile` as a custom route.
 ## License
 
 [MIT License](LICENSE), copyright (c) 2026 Benjamin Benno Falkner.
+
+Third-party software and fonts shipped with edotex are listed with their
+licenses in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Note on AI-assisted development
 

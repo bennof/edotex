@@ -16,14 +16,15 @@ export PKG_CONFIG_ALL_STATIC := 1
 endif
 
 ifeq ($(SYSTEM_NAME),Darwin)
-INSTALL_PREFIX ?= /usr/local
 # macOS builds include the menu bar app (edotex tray, edotex.app).
 CARGO_FEATURES ?= desktop
-else ifeq ($(SYSTEM_NAME),Linux)
-INSTALL_PREFIX ?= $(HOME)/.local
-else
+else ifneq ($(SYSTEM_NAME),Linux)
 $(error Unsupported operating system: $(SYSTEM_NAME))
 endif
+
+# /usr/local/bin is on every user's PATH (and used by the systemd service);
+# installing there needs root: sudo make install.
+INSTALL_PREFIX ?= /usr/local
 
 CARGO_FEATURE_FLAGS := $(if $(CARGO_FEATURES),--features $(CARGO_FEATURES))
 INSTALL_DIR ?= $(INSTALL_PREFIX)/bin
@@ -34,7 +35,7 @@ VERSION := $(shell cargo pkgid 2>/dev/null | cut -d\# -f2)
 DOC_TEX := $(wildcard $(DOC_DIR)/*.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-.PHONY: all clean check cargo-check fmt run build web install install-server app install-texmf doc clean-doc commit-version version push
+.PHONY: all clean check cargo-check fmt run build web install install-server app install-texmf doc clean-doc commit-version version push licenses
 
 all:  build
 
@@ -74,8 +75,8 @@ web:
 
 install: 
 	@echo "Installing $(BINARY_NAME) on $(SYSTEM_NAME) to $(INSTALL_DIR)"
-	install -d "$(INSTALL_DIR)"
-	install -m 755 "$(BINARY_PATH)" "$(INSTALL_DIR)/"
+	install -d -m 755 "$(INSTALL_DIR)"
+	install -m 755 "$(BINARY_PATH)" "$(INSTALL_DIR)/$(BINARY_NAME)"
 
 # macOS: package target/release/edotex as edotex.app in dist/edotex.dmg.
 app:
@@ -98,6 +99,12 @@ install-server:
 	install -m 644 deploy/edotex.service /etc/systemd/system/edotex.service
 	systemctl daemon-reload
 	systemctl try-restart edotex
+
+# THIRD_PARTY_LICENSES.md: licenses of all shipped dependencies (Rust crates via
+# cargo-about, native libraries, web editor, fonts). Needs make deps and make web.
+licenses:
+	command -v cargo-about >/dev/null || cargo install cargo-about --locked --features cli
+	sh scripts/gen-licenses.sh THIRD_PARTY_LICENSES.md "$(CARGO_FEATURES)"
 
 doc: $(DOC_PDF)
 
