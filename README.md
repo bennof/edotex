@@ -7,7 +7,7 @@
 `edotex` is the Rust successor to `gotex`: a command-line tool and library for
 compiling LaTeX documents with Tectonic and an embedded TeX tree.
 
-Current version: **0.2.0-beta.2** (beta).
+Current version: **0.2.0-beta.3** (beta).
 
 The binary includes the classes, packages and fonts from `texmf/`. It extracts
 that tree into a local data directory and uses its subdirectories as additional
