@@ -27,6 +27,11 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/edotex.icns"
 rm -rf "$ICONSET"
+# License files: inside the app (they stay with the installed copy) and in the DMG.
+for file in LICENSE THIRD_PARTY_LICENSES.md; do
+    cp "$ROOT/$file" "$APP/Contents/Resources/$file"
+    cp "$ROOT/$file" "$STAGE/$file"
+done
 plutil -lint "$APP/Contents/Info.plist"
 # Ad-hoc signature: required on Apple Silicon; not a Developer ID (Gatekeeper still warns).
 codesign --force --sign - "$APP"

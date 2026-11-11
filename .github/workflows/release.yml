@@ -132,13 +132,19 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          # Archive: <archive>/edotex, Makefile and deploy/ for make install / install-server.
+          # Archive: <archive>/edotex, Makefile and deploy/ for make install / install-server,
+          # plus the license files.
           dir="dist/${{ matrix.target.archive }}"
           mkdir -p "$dir"
-          cp target/release/edotex Makefile "$dir/"
+          cp target/release/edotex Makefile LICENSE THIRD_PARTY_LICENSES.md "$dir/"
           cp -R deploy "$dir/"
           tar -C dist -czf "${{ matrix.target.archive }}.tar.gz" "${{ matrix.target.archive }}"
           tar -tzf "${{ matrix.target.archive }}.tar.gz"
+
+      # Linux: .deb for Debian and Ubuntu (static binary, so one package per architecture).
+      - name: Package .deb
+        if: runner.os == 'Linux'
+        run: sh scripts/build-deb.sh target/release/edotex "${{ matrix.target.archive }}.deb"
 
       # macOS: menu bar app edotex.app in a DMG, next to the CLI archive.
       - name: Package macOS app
@@ -152,6 +158,7 @@ jobs:
           path: |
             ${{ matrix.target.archive }}.tar.gz
             ${{ matrix.target.archive }}.dmg
+            ${{ matrix.target.archive }}.deb
           if-no-files-found: error
 
   release:
@@ -176,4 +183,5 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.dmg
+            dist/*.deb
           fail_on_unmatched_files: true

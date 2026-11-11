@@ -35,7 +35,7 @@ VERSION := $(shell cargo pkgid 2>/dev/null | cut -d\# -f2)
 DOC_TEX := $(wildcard $(DOC_DIR)/*.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-.PHONY: all clean check cargo-check fmt run build web install install-server app install-texmf doc clean-doc commit-version version push licenses
+.PHONY: all clean check cargo-check fmt run build web install install-server app install-texmf doc clean-doc commit-version version push licenses deb
 
 all:  build
 
@@ -82,6 +82,11 @@ install:
 app:
 	test "$(SYSTEM_NAME)" = Darwin || { echo "edotex.app is only built on macOS."; exit 1; }
 	sh scripts/build-macos-app.sh "$(BINARY_PATH)" dist/edotex.dmg
+
+# Linux: package the built binary as dist/edotex.deb (needs dpkg-deb).
+deb:
+	test "$(SYSTEM_NAME)" = Linux || { echo "The .deb package is only built on Linux."; exit 1; }
+	sh scripts/build-deb.sh "$(BINARY_PATH)" dist/edotex.deb
 
 install-server:
 	test "$(SYSTEM_NAME)" = Linux || { echo "Server installation is only supported on Linux."; exit 1; }

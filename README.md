@@ -207,6 +207,7 @@ again. Keep `Cargo.lock` versioned and consistent with `Cargo.toml`.
 | `make serve` | Start `edotex serve` from the debug build. |
 | `make install` | Install the binary into `INSTALL_DIR`; uses `./edotex` from a release archive, otherwise `target/release/edotex` (run `make build` first). |
 | `make app` | macOS only: package the built binary as `edotex.app` in `dist/edotex.dmg`. |
+| `make deb` | Linux only: package the built binary as `dist/edotex.deb` (needs `dpkg-deb`). |
 | `make install-server` | Linux only, as root: install edotex as a systemd service; see [Server deployment](#server-deployment). |
 | `make licenses` | Write `THIRD_PARTY_LICENSES.md` with the licenses of all shipped dependencies (Rust crates via `cargo-about`, native libraries, web editor, fonts); installs `cargo-about` if missing and needs `make deps` and `make web`. Hand-written parts live in `licenses/`. |
 | `make doc` | Build documentation PDFs that are missing or older than their `.tex` source. |
@@ -251,10 +252,26 @@ Pushes to `main` and pull requests do not trigger the workflow.
 | Linux ARM64 (static, musl) | `edotex-linux-aarch64.tar.gz` |
 | macOS ARM64 (Apple Silicon) | `edotex-macos-aarch64.tar.gz` |
 | macOS ARM64 menu bar app | `edotex-macos-aarch64.dmg` |
+| Debian/Ubuntu x86_64 package | `edotex-linux-x86_64.deb` |
+| Debian/Ubuntu ARM64 package | `edotex-linux-aarch64.deb` |
 
 Each archive contains one directory named like the archive, with the `edotex`
-executable, the `Makefile` and the `deploy/` files, so `make install` and
-`make install-server` work directly from the unpacked archive. Windows and
+executable, the `Makefile`, the `deploy/` files, `LICENSE` and
+`THIRD_PARTY_LICENSES.md`, so `make install` and `make install-server` work
+directly from the unpacked archive. The DMG contains both license files next
+to the app and inside `edotex.app/Contents/Resources/`.
+
+The `.deb` packages contain the static binary, so one package per architecture
+works on all current Debian and Ubuntu releases. They install `/usr/bin/edotex`
+and the license files in `/usr/share/doc/edotex/` (including the Debian
+`copyright` file); no service is set up:
+
+```sh
+sudo apt install ./edotex-linux-x86_64.deb
+```
+
+`THIRD_PARTY_LICENSES.md` is versioned and copied into the packages as is;
+regenerate it with `make licenses` after changing dependencies. Windows and
 Intel macOS archives are not configured.
 
 The Linux binaries are fully static: they are built against musl in an Alpine

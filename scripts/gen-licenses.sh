@@ -43,7 +43,8 @@ printf '\n' >> "$TMP"
     "$LIC/rust.hbs" -o "$TMP.rust")
 cat "$TMP.rust" >> "$TMP"
 
-# Native libraries
+# Native libraries (Expat and Fontconfig are only built on Linux, so their
+# license texts are kept in licenses/ to make the file complete on macOS too).
 HARFBUZZ=$(cd "$ROOT" && cargo metadata --format-version 1 --locked 2>/dev/null |
     python3 -c 'import json,sys,os
 for p in json.load(sys.stdin)["packages"]:
@@ -57,8 +58,8 @@ license_block "libpng 1.6.55 (libpng-2.0)" "$SRC/libpng-1.6.55/LICENSE" https://
 license_block "FreeType 2.14.3 (FTL)" "$SRC/freetype-VER-2-14-3/docs/FTL.TXT" https://gitlab.freedesktop.org/freetype/freetype/-/blob/VER-2-14-3/docs/FTL.TXT
 license_block "Graphite2 1.3.14 (MPL-2.0)" "$SRC/graphite-1.3.14/COPYING" https://github.com/silnrsi/graphite/blob/1.3.14/COPYING
 printf 'Graphite2 is used under the Mozilla Public License 2.0; its text is listed under Rust crates.\n\n' >> "$TMP"
-license_block "Expat 2.7.4 (MIT, Linux only)" "$SRC/expat-2.7.4/COPYING" https://github.com/libexpat/libexpat/blob/R_2_7_4/expat/COPYING
-license_block "Fontconfig 2.16.0 (MIT-style, Linux only)" "$SRC/fontconfig-2.16.0/COPYING" https://gitlab.freedesktop.org/fontconfig/fontconfig/-/blob/2.16.0/COPYING
+license_block "Expat 2.7.4 (MIT, Linux only)" "$LIC/expat-2.7.4-COPYING.txt" https://github.com/libexpat/libexpat/blob/R_2_7_4/expat/COPYING
+license_block "Fontconfig 2.16.0 (MIT-style, Linux only)" "$LIC/fontconfig-2.16.0-COPYING.txt" https://gitlab.freedesktop.org/fontconfig/fontconfig/-/blob/2.16.0/COPYING
 
 # Web editor: runtime packages bundled into web/build
 printf '## Web editor\n\n' >> "$TMP"
